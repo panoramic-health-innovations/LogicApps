@@ -1,0 +1,263 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "EPIC_Access_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EPICAccessToken",
+                            "type": "string",
+                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Response": {
+                "inputs": {
+                    "body": "@concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"200\" },\"Body\":{ \"Care Plan Details\" : ',json(body('Get_CarePlan_Details')), ', \"Get_Device_Details\"' , json(body('Get_Device_Details')),', \"Get_Goal_Details\"' , json(body('Get_Goal_Details')),', \"Get_Immunization_Details\"' , json(body('Get_Immunization_Details')),', \"Get_LabTest_Details\"' , json(body('Get_LabTest_Details')),', \"Get_Lab_Result\"' , json(body('Get_Lab_Result')),', \"Get_Medication_Allergies\"' , json(body('Get_Medication_Allergies')),', \"Get_Problem_Details\"' , json(body('Get_Problem_Details')),', \"Get_Procedure_Details\"' , json(body('Get_Procedure_Details')),', \"Get_Smoking_Details\"' , json(body('Get_Smoking_Details')),', \"Get_Vital_Details\"' , json(body('Get_Vital_Details')),', \"Search_Medication_Requests\"' , json(body('Search_Medication_Requests')),'}}')",
+                    "statusCode": 200
+                },
+                "kind": "Http",
+                "runAfter": {
+                    "Scope": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Response"
+            },
+            "Scope": {
+                "actions": {
+                    "Get_CarePlan_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/DSTU2/CarePlan?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Device_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/DSTU2/Device?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Goal_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/goal?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {},
+                        "type": "Http"
+                    },
+                    "Get_Immunization_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Immunization?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_LabTest_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/DiagnosticReport?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Lab_Result": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Observation?patient=@{triggerBody()?['PatientID']}&category=laboratory"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Medication_Allergies": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/AllergyIntolerance?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Problem_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Condition?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Procedure_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Procedure?patient=@{triggerBody()?['PatientID']}&date=gt2019-03-01"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Smoking_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Observation?patient=@{triggerBody()?['PatientID']}&category=social-history"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Get_Vital_Details": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Observation?patient=@{triggerBody()?['PatientID']}&category=vital-signs"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Search_Medication_Requests": {
+                        "inputs": {
+                            "headers": {
+                                "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                "Content-Type": "application/json",
+                                "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                            },
+                            "method": "GET",
+                            "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/MedicationRequest?patient=@{triggerBody()?['PatientID']}"
+                        },
+                        "runAfter": {
+                            "Get_Goal_Details": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    }
+                },
+                "runAfter": {
+                    "EPIC_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Scope"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {},
+        "triggers": {
+            "manual": {
+                "inputs": {
+                    "schema": {
+                        "properties": {
+                            "PatientID": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "kind": "Http",
+                "type": "Request"
+            }
+        }
+    },
+    "parameters": {}
+}

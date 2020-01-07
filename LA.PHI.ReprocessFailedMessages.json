@@ -1,0 +1,208 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Condition": {
+                "actions": {
+                    "Call_Front_End_API": {
+                        "inputs": {
+                            "body": "@json(base64ToString(triggerBody()?['ContentData']))['Body']",
+                            "headers": {
+                                "Authorization": "Bearer @{body('GetAccessToken')}",
+                                "Content-Type": "application/json",
+                                "CreatedTimeStamp": "@json(base64ToString(triggerBody()?['ContentData']))['Header']['CreatedTimeStamp']",
+                                "HTTPVerb": "@json(base64ToString(triggerBody()?['ContentData']))['Header']['HTTPVerb']",
+                                "Originator": "@json(base64ToString(triggerBody()?['ContentData']))['Header']['Originator']",
+                                "RetryCount": "@json(base64ToString(triggerBody()?['ContentData']))['Header']['RetryCount']",
+                                "Source": "@json(base64ToString(triggerBody()?['ContentData']))['Header']['Source']",
+                                "TransactionName": "@json(base64ToString(triggerBody()?['ContentData']))['Header']['TransactionName']"
+                            },
+                            "method": "POST",
+                            "uri": "@body('Parse_JSON')?['Header']?['FrontEndURL']"
+                        },
+                        "runAfter": {
+                            "GetAccessToken": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "GetAccessToken": {
+                        "inputs": {
+                            "body": {
+                                "audience": "https://azurehealthcareapis.com",
+                                "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                                "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                                "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                            },
+                            "function": {
+                                "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                            }
+                        },
+                        "runAfter": {},
+                        "type": "Function"
+                    },
+                    "Scope": {
+                        "actions": {
+                            "Delay_By_1_Minute": {
+                                "inputs": {
+                                    "interval": {
+                                        "count": 1,
+                                        "unit": "Minute"
+                                    }
+                                },
+                                "runAfter": {},
+                                "type": "Wait"
+                            },
+                            "Send_message": {
+                                "inputs": {
+                                    "body": {
+                                        "ContentData": "@encodeBase64(replace(base64ToString(triggerBody()?['ContentData']),concat('\"RetryCount\":\"',int(body('Parse_JSON')?['Header']?['RetryCount']),'\"'),concat('\"RetryCount\":\"',add(int(body('Parse_JSON')?['Header']?['RetryCount']),1),'\"')))"
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "path": "/@{encodeURIComponent(encodeURIComponent('errorretry'))}/messages",
+                                    "queries": {
+                                        "systemProperties": "None"
+                                    }
+                                },
+                                "runAfter": {
+                                    "Delay_By_1_Minute": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection"
+                            }
+                        },
+                        "runAfter": {
+                            "Call_Front_End_API": [
+                                "Failed"
+                            ]
+                        },
+                        "type": "Scope"
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "Send_To_Fatal_Queue": {
+                            "inputs": {
+                                "body": {
+                                    "ContentData": "@{base64(replace(base64ToString(triggerBody()?['ContentData']),concat('\"RetryCount\":\"',int(body('Parse_JSON')?['Header']?['RetryCount']),'\"'),concat('\"RetryCount\":\"',add(int(body('Parse_JSON')?['Header']?['RetryCount']),1),'\"')))}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/@{encodeURIComponent(encodeURIComponent('errormanual'))}/messages",
+                                "queries": {
+                                    "systemProperties": "None"
+                                }
+                            },
+                            "runAfter": {},
+                            "type": "ApiConnection"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "lessOrEquals": [
+                                "@int(body('Parse_JSON')?['Header']?['RetryCount'])",
+                                5
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Parse_JSON": {
+                "inputs": {
+                    "content": "@json(base64ToString(triggerBody()?['ContentData']))",
+                    "schema": {
+                        "properties": {
+                            "Body": {
+                                "properties": {
+                                    "Payload": {
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "Header": {
+                                "properties": {
+                                    "FrontEndURL": {
+                                        "type": "string"
+                                    },
+                                    "RetryCount": {
+                                        "type": "string"
+                                    },
+                                    "Source": {
+                                        "type": "string"
+                                    },
+                                    "TransactionName": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {},
+                "type": "ParseJson"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_queue_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('errorretry'))}/messages/head",
+                    "queries": {
+                        "queueType": "Main"
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 1
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}

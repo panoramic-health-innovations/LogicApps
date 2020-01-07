@@ -1,0 +1,304 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(body('Parse_JSON')?['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
+            "EPIC_Access_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EPICAccessToken",
+                            "type": "string",
+                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Parse_Identifier": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "AppointmentID": {
+                                "type": "string"
+                            },
+                            "AppointmentIDType": {
+                                "type": "string"
+                            },
+                            "DepartmentID": {
+                                "type": "string"
+                            },
+                            "VisitType": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Parse_JSON": {
+                "inputs": {
+                    "content": "@triggerBody()",
+                    "schema": {
+                        "properties": {
+                            "Comments": {
+                                "type": "string"
+                            },
+                            "Endpoint": {
+                                "type": "string"
+                            },
+                            "Identifier": {
+                                "type": "string"
+                            },
+                            "PatientExternalID": {
+                                "type": "string"
+                            },
+                            "PatientIDType": {
+                                "type": "string"
+                            },
+                            "ProviderExternalID": {
+                                "type": "string"
+                            },
+                            "ResourceType": {
+                                "type": "string"
+                            },
+                            "SlotDate": {
+                                "type": "string"
+                            },
+                            "SlotTime": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "EPIC_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Switch": {
+                "cases": {
+                    "Athena": {
+                        "actions": {
+                            "AthenaErrorResponse": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Book_Appointment_in_Athena')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" :',if(startsWith(trim(body('Book_Appointment_in_Athena')),'{'),body('Book_Appointment_in_Athena'),concat('\"',body('Book_Appointment_in_Athena'),'\"')),'}}'))",
+                                    "statusCode": "@outputs('Book_Appointment_in_Athena')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Book_Appointment_in_Athena": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Athena_Book_Appointment_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Book_Appointment_in_Athena')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Confirmed\", \"ReasonDescription\" : \"NA\", \"AppointmentID\" : \"',body('Book_Appointment_in_Athena')[0]['appointmentid'],'\" }}'))",
+                                    "statusCode": "@outputs('Book_Appointment_in_Athena')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Book_Appointment_in_Athena": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Book_Appointment_in_Athena": {
+                                "inputs": {
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('Parse_Access_Token')?['access_token']}",
+                                        "content-type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "PUT",
+                                    "uri": "@concat('https://api.athenahealth.com/preview1/195900/appointments/',body('Parse_Identifier')?['AppointmentID'],'?appointmenttypeid=',body('Parse_Identifier')?['AppointmentTypeID'],'&ignoreschedulablepermission=true&patientid=',body('Parse_JSON')?['PatientExternalID'])"
+                                },
+                                "runAfter": {
+                                    "Parse_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Get_Access_Token": {
+                                "inputs": {
+                                    "body": "grant_type=client_credentials&client_id=wffujq3bf5hqxbkvcqb2qta3&client_secret=f4GgJBxFF9Rcp4B",
+                                    "headers": {
+                                        "content-type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://api.athenahealth.com/oauthpreview/token"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Parse_Access_Token": {
+                                "inputs": {
+                                    "content": "@body('Get_Access_Token')",
+                                    "schema": {
+                                        "properties": {
+                                            "access_token": {
+                                                "type": "string"
+                                            },
+                                            "expires_in": {
+                                                "type": "integer"
+                                            },
+                                            "refresh_token": {
+                                                "type": "string"
+                                            },
+                                            "token_type": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "runAfter": {
+                                    "Get_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ParseJson"
+                            }
+                        },
+                        "case": "ATHENA"
+                    },
+                    "EPIC": {
+                        "actions": {
+                            "Book_Appointment": {
+                                "inputs": {
+                                    "body": {
+                                        "Comments": [
+                                            "Scheduled via ScheduleAppointmentWithInsurance (2018B)"
+                                        ],
+                                        "Insurance": {
+                                            "GroupNumber": "@{body('Parse_JSON')?['GroupNumber']}",
+                                            "InsuranceName": "@{body('Parse_JSON')?['InsuranceName']}",
+                                            "MemberNumber": "@{body('Parse_JSON')?['MemberNumber']}",
+                                            "PayorID": "@{body('Parse_JSON')?['PayorID']}",
+                                            "PayorIDType": "@{body('Parse_JSON')?['PayorIDType']}",
+                                            "SubscriberDateOfBirth": "@{body('Parse_JSON')?['SubscriberDateOfBirth']}",
+                                            "SubscriberID": "@{body('Parse_JSON')?['SubscriberID']}",
+                                            "SubscriberName": "@{body('Parse_JSON')?['SubscriberName']}"
+                                        }
+                                    },
+                                    "headers": {
+                                        "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                        "Content-Type": "application/json",
+                                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat('https://apporchard.epic.com/interconnect-aocurprd-username/api/epic/2018B/PatientAccess/External/ScheduleAppointmentWithInsurance/Scheduling2018/Open/ScheduleWithInsurance?PatientID=',body('Parse_JSON')?['PatientExternalID'],'&PatientIDType=',body('Parse_JSON')?['PatientIDType'],'&DepartmentID=',body('Parse_Identifier')?['DepartmentExternalID'],'&DepartmentIDType=External&VisitTypeIDType=External&Date=',body('Parse_JSON')?['SlotDate'],'&IsReviewOnly=false&ProviderID=',body('Parse_JSON')?['ProviderExternalID'],'&VisitTypeID=',body('Parse_Identifier')?['VisitType'],'&ProviderIDType=External&Time=',body('Parse_JSON')?['SlotTime'],'&IsSelfPay=true')"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "ErrorResponse": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Book_Appointment')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" :\"',body('Book_Appointment'),'\"}}'))",
+                                    "statusCode": "@outputs('Book_Appointment')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Book_Appointment": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Book_Appointment')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Confirmed\", \"ReasonDescription\" : \"NA\", \"AppointmentID\" : \"\" }}'))",
+                                    "statusCode": "@outputs('Book_Appointment')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Book_Appointment": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "EPIC"
+                    }
+                },
+                "default": {
+                    "actions": {}
+                },
+                "expression": "@toupper(triggerBody()?['Endpoint'])",
+                "runAfter": {
+                    "Parse_Identifier": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Switch"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {},
+        "triggers": {
+            "manual": {
+                "inputs": {
+                    "schema": {
+                        "properties": {
+                            "Comments": {
+                                "type": "string"
+                            },
+                            "Endpoint": {
+                                "type": "string"
+                            },
+                            "Identifier": {
+                                "type": "string"
+                            },
+                            "PatientExternalID": {
+                                "type": "string"
+                            },
+                            "PatientIDType": {
+                                "type": "string"
+                            },
+                            "ProviderExternalID": {
+                                "type": "string"
+                            },
+                            "ResourceType": {
+                                "type": "string"
+                            },
+                            "SlotDate": {
+                                "type": "string"
+                            },
+                            "SlotTime": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "kind": "Http",
+                "type": "Request"
+            }
+        }
+    },
+    "parameters": {}
+}

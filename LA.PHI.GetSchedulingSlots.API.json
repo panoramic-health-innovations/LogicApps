@@ -1,0 +1,221 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "EPIC_Access_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EPICAccessToken",
+                            "type": "string",
+                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Parse_JSON": {
+                "inputs": {
+                    "content": "@triggerBody()",
+                    "schema": {
+                        "properties": {
+                            "AppointmentDate": {
+                                "type": "string"
+                            },
+                            "AppointmentTime": {
+                                "type": "string"
+                            },
+                            "AppointmentTypeID": {
+                                "type": "string"
+                            },
+                            "DepartmentID": {
+                                "type": "string"
+                            },
+                            "Endpoint": {
+                                "type": "string"
+                            },
+                            "ProviderIDType": {
+                                "type": "string"
+                            },
+                            "ProviderKey": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "EPIC_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Switch": {
+                "cases": {
+                    "Athena": {
+                        "actions": {
+                            "Get_Athena_Access_Token": {
+                                "inputs": {
+                                    "body": "grant_type=client_credentials&client_id=wffujq3bf5hqxbkvcqb2qta3&client_secret=f4GgJBxFF9Rcp4B",
+                                    "headers": {
+                                        "content-type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://api.athenahealth.com/oauthpreview/token"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Get_Slots_from_Athena": {
+                                "inputs": {
+                                    "body": "appointmentdate=@{formatDateTime(body('Parse_JSON')?['AppointmentDate'],'MM/dd/yyyy')}&appointmenttime=@{body('Parse_JSON')?['AppointmentTime']}&appointmenttypeid=@{body('Parse_JSON')?['AppointmentTypeID']}&departmentid=@{body('Parse_JSON')?['DepartmentID']}&ignoreschedulablepermission=true&providerid=@{body('Parse_JSON')?['ProviderKey']}",
+                                    "headers": {
+                                        "Authorization": "@concat('Bearer ',body('Get_Athena_Access_Token')['access_token'])",
+                                        "Content-Type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://api.athenahealth.com/preview1/195900/appointments/open"
+                                },
+                                "runAfter": {
+                                    "Get_Athena_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Return_Athena_Error_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Get_Slots_from_Athena')['statusCode'],'\" },\"Body\":{ \"content\" :',body('Get_Slots_from_Athena'),'}}'))",
+                                    "statusCode": "@outputs('Get_Slots_from_Athena')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Slots_from_Athena": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Return_Athena_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_Slots_from_Athena')['statusCode'],'\" },\"Body\":{ \"content\" :',body('Get_Slots_from_Athena'),'}}'))",
+                                    "statusCode": "@outputs('Get_Slots_from_Athena')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Slots_from_Athena": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "ATHENA"
+                    },
+                    "EPIC": {
+                        "actions": {
+                            "EPIC_Error_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Get_Schedule_Days_For_Provider')['statusCode'],'\" },\"Body\":{ \"content\" :',body('Get_Schedule_Days_For_Provider'),'}}'))",
+                                    "statusCode": "@outputs('Get_Schedule_Days_For_Provider')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Schedule_Days_For_Provider": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Get_Schedule_Days_For_Provider": {
+                                "inputs": {
+                                    "body": {
+                                        "DepartmentIDs": [],
+                                        "EndDate": "",
+                                        "ProviderID": "@body('Parse_JSON')?['ProviderKey']",
+                                        "ProviderIDType": "@body('Parse_JSON')?['ProviderIDType']",
+                                        "StartDate": "",
+                                        "VisitTypeIDs": []
+                                    },
+                                    "headers": {
+                                        "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                        "Content-Type": "application/json",
+                                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/epic/2017/PatientAccess/External/GetScheduleDaysForProvider2/Scheduling/Open/Provider/GetScheduleDays2"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_Schedule_Days_For_Provider')['statusCode'],'\" },\"Body\":{ \"content\" :',body('Get_Schedule_Days_For_Provider'),'}}'))",
+                                    "statusCode": "@outputs('Get_Schedule_Days_For_Provider')['statusCode']"
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Schedule_Days_For_Provider": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "EPIC"
+                    }
+                },
+                "default": {
+                    "actions": {}
+                },
+                "expression": "@toupper(body('Parse_JSON')?['Endpoint'])",
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Switch"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {},
+        "triggers": {
+            "manual": {
+                "inputs": {
+                    "schema": {
+                        "properties": {
+                            "AppointmentDate": {
+                                "type": "string"
+                            },
+                            "AppointmentTime": {
+                                "type": "string"
+                            },
+                            "AppointmentTypeID": {
+                                "type": "string"
+                            },
+                            "DepartmentID": {
+                                "type": "string"
+                            },
+                            "Endpoint": {
+                                "type": "string"
+                            },
+                            "ProviderIDType": {
+                                "type": "string"
+                            },
+                            "ProviderKey": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "kind": "Http",
+                "type": "Request"
+            }
+        }
+    },
+    "parameters": {}
+}

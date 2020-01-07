@@ -1,0 +1,377 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "AppointmentTypeID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AppointmentTypeID",
+                            "type": "string",
+                            "value": "{\"text\": \"AppointmentTypeID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Department_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Appointment_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AppointmentID",
+                            "type": "string",
+                            "value": "{\"text\": \"AppointmentID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "AppointmentTypeID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Athena_Access_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AccessToken",
+                            "type": "string",
+                            "value": "@body('Get_Access_Token')['access_token']"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Department_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "DeptID",
+                            "type": "string",
+                            "value": "{\"text\": \"DepartmentID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Visit_Type": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "Get_Access_Token": {
+                "inputs": {
+                    "body": "grant_type=client_credentials&client_id=wffujq3bf5hqxbkvcqb2qta3&client_secret=f4GgJBxFF9Rcp4B",
+                    "headers": {
+                        "content-type": "application/x-www-form-urlencoded"
+                    },
+                    "method": "POST",
+                    "uri": "https://api.athenahealth.com/oauthpreview/token"
+                },
+                "runAfter": {
+                    "Initialize_Counter_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_Appointment_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AthenaAppointmentID",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Appointment_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Counter_Date": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Counter Date",
+                            "type": "string",
+                            "value": "Anything"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Start_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_End_Date": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EndDate",
+                            "type": "string",
+                            "value": "@concat(addDays(json(base64ToString(triggerBody()?['ContentData']))['AppointmentDate'],1,'yyyy-MM-dd'),'T00:00:00')"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Appointment_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Start_Date": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "StartDate",
+                            "type": "string",
+                            "value": "@concat(json(base64ToString(triggerBody()?['ContentData']))['AppointmentDate'],'T',json(base64ToString(triggerBody()?['ContentData']))['AppointmentTime'])"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_End_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Parse_JSON": {
+                "inputs": {
+                    "content": "@triggerBody()",
+                    "schema": {
+                        "properties": {
+                            "Endpoint": {
+                                "type": "string"
+                            },
+                            "FHIRPractitionerRoleID": {
+                                "type": "string"
+                            },
+                            "ProviderIDType": {
+                                "type": "string"
+                            },
+                            "ProviderKey": {
+                                "type": "string"
+                            },
+                            "appointmenttypeid": {
+                                "type": "string"
+                            },
+                            "departmentid": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Get_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Until": {
+                "actions": {
+                    "Create_Slots_in_Athena": {
+                        "inputs": {
+                            "body": "appointmentdate=@{replace(formatDateTime(substring(string(variables('StartDate')),0,10),'MM/dd/yyyy'),'/','%2F')}&appointmenttime=@{replace(substring(string(variables('StartDate')),11,5),':','%3A')}&appointmenttypeid=@{json(base64ToString(triggerBody()?['ContentData']))['appointmenttypeid']}&departmentid=@{json(base64ToString(triggerBody()?['ContentData']))['departmentid']}&ignoreschedulablepermission=true&providerid=@{json(base64ToString(triggerBody()?['ContentData']))['ProviderKEy']}",
+                            "headers": {
+                                "Authorization": "@concat('Bearer ',body('Get_Access_Token')['access_token'])",
+                                "Content-Type": "application/x-www-form-urlencoded"
+                            },
+                            "method": "POST",
+                            "uri": "https://api.athenahealth.com/preview1/195900/appointments/open"
+                        },
+                        "runAfter": {
+                            "Set_Counter_Date": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Create_Slots_in_FHIR": {
+                        "inputs": {
+                            "body": {
+                                "comment": "Assessments should be performed before requesting appointments in this slot.",
+                                "end": "@addToTime(concat(variables('StartDate'),'Z'),15,'Minute')",
+                                "identifier": [
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('VisitType'))",
+                                        "value": "Physical"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('DeptID'))",
+                                        "value": "@json(base64ToString(triggerBody()?['ContentData']))['departmentid']"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('AppointmentID'))",
+                                        "value": "@variables('AthenaAppointmentID')"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('AppointmentTypeID'))",
+                                        "value": "@json(base64ToString(triggerBody()?['ContentData']))['appointmenttypeid']"
+                                    }
+                                ],
+                                "resourceType": "Slot",
+                                "schedule": {
+                                    "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/',json(base64ToString(triggerBody()?['ContentData']))['ScheduleID'])",
+                                    "type": "Schedule"
+                                },
+                                "start": "@concat(variables('StartDate'),'Z')",
+                                "status": "free"
+                            },
+                            "headers": {
+                                "Authorization": "Bearer @{body('GetAccessToken')}",
+                                "Content-Type": "application/json"
+                            },
+                            "method": "POST",
+                            "uri": "https://panoramic-dev.azurehealthcareapis.com/Slot/"
+                        },
+                        "runAfter": {
+                            "Set_Athena_Appointment_ID": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Set_Athena_Appointment_ID": {
+                        "inputs": {
+                            "name": "AthenaAppointmentID",
+                            "value": "@{substring(string(body('Create_Slots_in_Athena')['appointmentids']),2,sub(indexOf(string(body('Create_Slots_in_Athena')['appointmentids']),':'),3))}"
+                        },
+                        "runAfter": {
+                            "Create_Slots_in_Athena": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "SetVariable"
+                    },
+                    "Set_Counter_Date": {
+                        "inputs": {
+                            "name": "Counter Date",
+                            "value": "@addMinutes(variables('StartDate'),15)"
+                        },
+                        "runAfter": {},
+                        "type": "SetVariable"
+                    },
+                    "Set_variable": {
+                        "inputs": {
+                            "name": "StartDate",
+                            "value": "@variables('Counter Date')"
+                        },
+                        "runAfter": {
+                            "Create_Slots_in_FHIR": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "SetVariable"
+                    }
+                },
+                "expression": "@equals(substring(variables('StartDate'), 0, 19), variables('EndDate'))",
+                "limit": {
+                    "count": 1000,
+                    "timeout": "PT1H"
+                },
+                "runAfter": {
+                    "Athena_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Until"
+            },
+            "Visit_Type": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "VisitType",
+                            "type": "string",
+                            "value": "{\"text\": \"VisitType\"}"
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_topic_subscription_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('obsched'))}/subscriptions/@{encodeURIComponent('Athena')}/messages/head",
+                    "queries": {
+                        "subscriptionType": "Main"
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 3
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}
