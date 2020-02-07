@@ -1,0 +1,189 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Condition": {
+                "actions": {
+                    "Send_message": {
+                        "inputs": {
+                            "body": {
+                                "ContentData": "@{base64(variables('data'))}",
+                                "Label": "UserNotification.StatusCode@{variables('returnedStatusCode')}"
+                            },
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "path": "/@{encodeURIComponent(encodeURIComponent('allerrors'))}/messages"
+                        },
+                        "runAfter": {},
+                        "type": "ApiConnection"
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "not": {
+                                "equals": [
+                                    "@outputs('HTTP')['statusCode']",
+                                    201
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_returnedStatusCode": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Condition_2": {
+                "actions": {
+                    "HTTP": {
+                        "inputs": {
+                            "body": "@variables('data')",
+                            "headers": {
+                                "Accept": "application/json",
+                                "Authorization": "Bearer edb311803fdfd5e6a707e7f8fb6dd598cc85af26c69060c8581960106ac9f73d149a50d1899f0797228b8f3dede525a0823c7b0984c991ebd9fef0be675e1a49",
+                                "Content-Type": "application/json"
+                            },
+                            "method": "POST",
+                            "uri": "https://us-central1-panoramic-frontend.cloudfunctions.net/sendPushNotificationToUser"
+                        },
+                        "runAfter": {},
+                        "type": "Http"
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "greaterOrEquals": [
+                                "@length(variables('data'))",
+                                0
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Initialize_data": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "data",
+                            "type": "string",
+                            "value": "@{base64ToString(triggerBody()?['ContentData'])}"
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Initialize_returnedStatusCode": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "returnedStatusCode",
+                            "type": "integer",
+                            "value": "@outputs('HTTP')['statusCode']"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Condition_2": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_variable": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "parsedbody",
+                            "type": "string",
+                            "value": "{\"userId\" :\"@{body('Parse_JSON')?['userId']}\",\"title\":\"@{body('Parse_JSON')?['title']}\",\"body\":\"@{body('Parse_JSON')?['body']}\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Parse_JSON": {
+                "inputs": {
+                    "content": "@triggerBody()",
+                    "schema": {
+                        "properties": {
+                            "body": {
+                                "type": "string"
+                            },
+                            "title": {
+                                "type": "string"
+                            },
+                            "userId": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_data": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_queue_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('usernotifications'))}/messages/head"
+                },
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 1
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}

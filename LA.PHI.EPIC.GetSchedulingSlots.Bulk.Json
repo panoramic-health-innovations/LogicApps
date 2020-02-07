@@ -1,0 +1,229 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "EPIC_Access_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EPICAccessToken",
+                            "type": "string",
+                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Initialize_Department_Object": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Dept",
+                            "type": "string",
+                            "value": "{\"text\": \"Department ID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "EPIC_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Visit_Type": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "VisitType",
+                            "type": "string",
+                            "value": "{\"text\": \"VisitType\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Department_Object": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Switch": {
+                "cases": {
+                    "EPIC": {
+                        "actions": {
+                            "GetAccessToken": {
+                                "inputs": {
+                                    "body": {
+                                        "audience": "https://azurehealthcareapis.com",
+                                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                                    },
+                                    "function": {
+                                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                                    }
+                                },
+                                "runAfter": {
+                                    "Get_Schedule_Days_For_Provider": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Function"
+                            },
+                            "Get_Schedule_Days_For_Provider": {
+                                "inputs": {
+                                    "body": {
+                                        "DepartmentIDs": [],
+                                        "EndDate": "",
+                                        "ProviderID": "@json(base64ToString(triggerBody()?['ContentData']))['ProviderID']",
+                                        "ProviderIDType": "@json(base64ToString(triggerBody()?['ContentData']))['ProviderIDType']",
+                                        "StartDate": "",
+                                        "VisitTypeIDs": []
+                                    },
+                                    "headers": {
+                                        "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                        "Content-Type": "application/json",
+                                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/epic/2017/PatientAccess/External/GetScheduleDaysForProvider2/Scheduling/Open/Provider/GetScheduleDays2"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Loop_Through_Schedule_Days": {
+                                "actions": {
+                                    "Loop_Through_Slots": {
+                                        "actions": {
+                                            "Create_Slot_in_FHIR": {
+                                                "inputs": {
+                                                    "body": {
+                                                        "comment": "Assessments should be performed before requesting appointments in this slot.",
+                                                        "end": "@addToTime(concat(items('Loop_Through_Schedule_Days')['Date'],'T',item()['Time'],'Z'),15,'Minute')",
+                                                        "identifier": [
+                                                            {
+                                                                "system": "",
+                                                                "type": "@json(variables('VisitType'))",
+                                                                "value": "@items('Loop_Through_Schedule_Days')['VisitType']['ID']"
+                                                            },
+                                                            {
+                                                                "system": "",
+                                                                "type": "@json(variables('Dept'))",
+                                                                "value": "@items('Loop_Through_Schedule_Days')['Department']['ID']"
+                                                            }
+                                                        ],
+                                                        "resourceType": "Slot",
+                                                        "schedule": {
+                                                            "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/',json(base64ToString(triggerBody()?['ContentData']))['ScheduleID'])",
+                                                            "type": "Schedule"
+                                                        },
+                                                        "start": "@concat(items('Loop_Through_Schedule_Days')['Date'],'T',item()['Time'],'Z')",
+                                                        "status": "free"
+                                                    },
+                                                    "headers": {
+                                                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                                                        "Content-Type": "application/json"
+                                                    },
+                                                    "method": "POST",
+                                                    "uri": "https://panoramic-dev.azurehealthcareapis.com/Slot/"
+                                                },
+                                                "runAfter": {},
+                                                "type": "Http"
+                                            }
+                                        },
+                                        "foreach": "@items('Loop_Through_Schedule_Days')['Slots']",
+                                        "runAfter": {},
+                                        "type": "Foreach"
+                                    }
+                                },
+                                "foreach": "@body('Get_Schedule_Days_For_Provider')['ScheduleDays']",
+                                "runAfter": {
+                                    "GetAccessToken": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Foreach"
+                            },
+                            "Send_message_to_Inbound_Queue": {
+                                "inputs": {
+                                    "body": {
+                                        "ContentData": "@{base64(body('Get_Schedule_Days_For_Provider'))}",
+                                        "Properties": {
+                                            "a": "b"
+                                        }
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "path": "/@{encodeURIComponent(encodeURIComponent('ibsched'))}/messages"
+                                },
+                                "runAfter": {
+                                    "Loop_Through_Schedule_Days": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection"
+                            }
+                        },
+                        "case": "EPIC"
+                    }
+                },
+                "default": {
+                    "actions": {}
+                },
+                "expression": "@toupper(json(base64ToString(triggerBody()?['ContentData']))['Endpoint'])",
+                "runAfter": {
+                    "Initialize_Visit_Type": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Switch"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_topic_subscription_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('obsched'))}/subscriptions/@{encodeURIComponent('EPIC')}/messages/head",
+                    "queries": {
+                        "subscriptionType": "Main"
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 3
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}

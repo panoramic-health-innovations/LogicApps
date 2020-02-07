@@ -154,7 +154,7 @@
                             },
                             "Return_EPIC_Error_Response": {
                                 "inputs": {
-                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Get_Practitioner_Details')['statusCode'],'\" },\"Body\":{ \"ProviderExternalID\" : \"',xpath(outputs('Get_Practitioner_Details')['body'],'string(//*[local-name()=\"Bundle\"]/*[local-name()=\"entry\"]/*[local-name()=\"resource\"]/*[local-name()=\"Practitioner\"]/*[local-name()=\"identifier\"][*[local-name()=\"type\"]/*[local-name()=\"text\"]/@*[local-name()=\"value\"]=\"EXTERNAL\"]/*[local-name()=\"value\"]/@*[local-name()=\"value\"])'),'\"}}'))",
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Get_Practitioner_Details')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" : ',if(startsWith(trim(string(body('Get_Practitioner_Details'))),'{'),body('Get_Practitioner_Details'),json(xml(body('Get_Practitioner_Details')))),'}}'))",
                                     "statusCode": "@outputs('Get_Practitioner_Details')['statusCode']"
                                 },
                                 "kind": "Http",

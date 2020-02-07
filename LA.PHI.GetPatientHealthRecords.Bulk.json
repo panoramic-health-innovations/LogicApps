@@ -1,0 +1,526 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Append_Final_Tag_to_Patient_Health_Response": {
+                "inputs": {
+                    "name": "FinalPHResponse",
+                    "value": "]}"
+                },
+                "runAfter": {
+                    "Set_Final_Patient_Record_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "AppendToStringVariable"
+            },
+            "Append_Final_Tag_to_Patient_Recurrence_Response": {
+                "inputs": {
+                    "name": "FinalPHRecurrence",
+                    "value": "]}"
+                },
+                "runAfter": {
+                    "Append_Final_Tag_to_Patient_Health_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "AppendToStringVariable"
+            },
+            "Delay": {
+                "inputs": {
+                    "interval": {
+                        "count": 2,
+                        "unit": "Minute"
+                    }
+                },
+                "runAfter": {
+                    "Send_message_to_recurrence_inbound_queue": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Wait"
+            },
+            "EPIC_Access_Tokem": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EPICAccessToken",
+                            "type": "string",
+                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Response_String": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "For_each": {
+                "actions": {
+                    "Switch": {
+                        "cases": {
+                            "Athena": {
+                                "actions": {},
+                                "case": "ATHENA"
+                            },
+                            "Epic": {
+                                "actions": {
+                                    "Append_to_Patient_Health_Response": {
+                                        "inputs": {
+                                            "name": "PatientsHealthRecordResponse",
+                                            "value": "@concat('{ \"PatientID\" : \"',items('For_each')?['PatientID'],'\", \"LastRetrievedTS\" : \"',string(formatDateTime(utcNow(),'yyyy-MM-ddThh:mm:ss')),'\", \"Endpoint\" : \"',items('For_each')?['Endpoint'],'\" },\"Response\":{  \"Get_Goal_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetGoalDetails.API')),', \"Get_Immunization_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetImmunizationDetails.API')),', \"Get_LabTest_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API')),', \"Get_Lab_Result\"' , json(body('LA.PHI.PatientHealthRecords.GetLabDetails.API')),', \"Get_Medication_Allergies\"' , json(body('LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API')),', \"Get_Condition_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetConditionDetails.API')),', \"Get_Procedure_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetProcedureDetails.API')),', \"Get_Smoking_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API')),', \"Get_Vital_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API')),', \"Get_Medication_Requests\"' , json(body('LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API')),'},')"
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "AppendToStringVariable"
+                                    },
+                                    "Append_to_Patient_Recurrence_Health_Response": {
+                                        "inputs": {
+                                            "name": "PatientHealthRecordRecurrenceResponse",
+                                            "value": "@concat('{ \"PatientID\" : \"',items('For_each')?['PatientID'],'\", \"LastRetrievedTS\" : \"',string(formatDateTime(utcNow(),'yyyy-MM-ddThh:mm:ss')),'\", \"Endpoint\" : \"',items('For_each')?['Endpoint'],'\" },\"Response\":{  \"Get_Goal_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetGoalDetails.API')),', \"Get_Immunization_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetImmunizationDetails.API')),', \"Get_LabTest_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API')),', \"Get_Lab_Result\"' , json(body('LA.PHI.PatientHealthRecords.GetLabDetails.API')),', \"Get_Medication_Allergies\"' , json(body('LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API')),', \"Get_Condition_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetConditionDetails.API')),', \"Get_Procedure_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetProcedureDetails.API')),', \"Get_Smoking_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API')),', \"Get_Vital_Details\"' , json(body('LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API')),', \"Get_Medication_Requests\"' , json(body('LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API')),'},')"
+                                        },
+                                        "runAfter": {
+                                            "Append_to_Patient_Health_Response": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "AppendToStringVariable"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetConditionDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetConditionDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetConditionDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetGoalDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetGoalDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetImmunizationDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetImmunizationDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetGoalDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetLabDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetLabDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetImmunizationDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetLabDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetProcedureDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetProcedureDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetProcedureDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    },
+                                    "LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API": {
+                                        "inputs": {
+                                            "body": {
+                                                "AzureFHIRID": "@items('For_each')?['AzureFHIRID']",
+                                                "EMRFHIRPatientID": "@items('For_each')?['PatientID']"
+                                            },
+                                            "host": {
+                                                "triggerName": "manual",
+                                                "workflow": {
+                                                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Workflow"
+                                    }
+                                },
+                                "case": "EPIC"
+                            }
+                        },
+                        "default": {
+                            "actions": {}
+                        },
+                        "expression": "@items('For_each')?['Endpoint']",
+                        "runAfter": {},
+                        "type": "Switch"
+                    }
+                },
+                "foreach": "@body('Parse_JSON')?['Patients']",
+                "runAfter": {
+                    "EPIC_Access_Tokem": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Initialize_Final_Patient_Health_Record_Response": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "FinalPHResponse",
+                            "type": "string",
+                            "value": "FinalPHResponse"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Recurrence_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Final_Patient_Recurrence_Response": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "FinalPHRecurrence",
+                            "type": "string",
+                            "value": "FinalPHRecurrence"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Final_Patient_Health_Record_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Recurrence_Response": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "PatientHealthRecordRecurrenceResponse",
+                            "type": "string",
+                            "value": "{  \"Patients\": ["
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Response_String": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "PatientsHealthRecordResponse",
+                            "type": "string",
+                            "value": "{  \"Patients\": ["
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Final_Patient_Recurrence_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Parse_JSON": {
+                "inputs": {
+                    "content": "@decodeBase64(triggerBody()?['ContentData'])",
+                    "schema": {
+                        "properties": {
+                            "Patients": {
+                                "items": {
+                                    "properties": {
+                                        "AzureFHIRID": {
+                                            "type": "string"
+                                        },
+                                        "Endpoint": {
+                                            "type": "string"
+                                        },
+                                        "LastAccessed": {
+                                            "type": "string"
+                                        },
+                                        "PatientID": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "PatientID",
+                                        "AzureFHIRID"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {},
+                "type": "ParseJson"
+            },
+            "Send_message_back_to_outbound_queue": {
+                "inputs": {
+                    "body": {
+                        "ContentData": "@{base64(variables('FinalPHResponse'))}"
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('obpatientrecord'))}/messages",
+                    "queries": {
+                        "systemProperties": "None"
+                    }
+                },
+                "runAfter": {
+                    "Delay": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            },
+            "Send_message_to_recurrence_inbound_queue": {
+                "inputs": {
+                    "body": {
+                        "ContentData": "@{base64(variables('FinalPHRecurrence'))}"
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('obpatientrecord'))}/messages",
+                    "queries": {
+                        "systemProperties": "None"
+                    }
+                },
+                "runAfter": {
+                    "Append_Final_Tag_to_Patient_Recurrence_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            },
+            "Set_Final_Patient_Record_Response": {
+                "inputs": {
+                    "name": "FinalPHResponse",
+                    "value": "@substring(variables('PatientsHealthRecordResponse'),0,sub(length(variables('PatientsHealthRecordResponse')),1))"
+                },
+                "runAfter": {
+                    "Set_Final_Recurrence_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable"
+            },
+            "Set_Final_Recurrence_Response": {
+                "inputs": {
+                    "name": "FinalPHRecurrence",
+                    "value": "@substring(variables('PatientHealthRecordRecurrenceResponse'),0,sub(length(variables('PatientHealthRecordRecurrenceResponse')),1))"
+                },
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_queue_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('ibpatientrecord'))}/messages/head",
+                    "queries": {
+                        "queueType": "Main"
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Day",
+                    "interval": 1
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,206 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Condition": {
+                "actions": {
+                    "For_each": {
+                        "actions": {
+                            "Create_VitalSigns_in_FHIR": {
+                                "inputs": {
+                                    "body": "@replace(string(item()),'\"subject\":null',variables('Subject'))",
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://panoramic-dev.azurehealthcareapis.com/Observation"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Set_Vitalsigns_Response": {
+                                "inputs": {
+                                    "name": "VitalSignsResponse",
+                                    "value": "\"FHIRID\" : \"@{body('Create_VitalSigns_in_FHIR')['id']}\","
+                                },
+                                "runAfter": {
+                                    "Create_VitalSigns_in_FHIR": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "AppendToStringVariable"
+                            }
+                        },
+                        "foreach": "@if(equals(int(json(body('Get_VitalSigns_From_EPIC'))['Bundle']['total']['@value']),1),json(concat('[',string(json(body('Transform_VitalSigns_XML'))['Observations']['Observation']),']')),json(body('Transform_VitalSigns_XML'))['Observations']['Observation'])",
+                        "runAfter": {
+                            "Transform_VitalSigns_XML": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Foreach"
+                    },
+                    "Transform_VitalSigns_XML": {
+                        "inputs": {
+                            "content": "@{body('Get_VitalSigns_From_EPIC')}",
+                            "integrationAccount": {
+                                "map": {
+                                    "name": "VitalSigns_To_VitalSignsTarget"
+                                }
+                            }
+                        },
+                        "runAfter": {},
+                        "type": "Xslt"
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "No_Response_From_EPIC": {
+                            "inputs": {
+                                "name": "VitalSignsResponse",
+                                "value": "\"FHIRID\":\"No Response From EPIC\"}"
+                            },
+                            "runAfter": {},
+                            "type": "AppendToStringVariable"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "greater": [
+                                "@int(json(body('Get_VitalSigns_From_EPIC'))['Bundle']['total']['@value'])",
+                                0
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_VitalSigns_From_EPIC": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "EPIC_Access_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EPICAccessToken",
+                            "type": "string",
+                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Subject_variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "EPIC_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "Get_VitalSigns_From_EPIC": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Basic @{variables('EPICAccessToken')}",
+                        "Content-Type": "application/json",
+                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                    },
+                    "method": "GET",
+                    "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Observation?patient=@{triggerBody()?['EMRFHIRPatientID']}&category=vital-signs"
+                },
+                "runAfter": {
+                    "Initialize_Vital_Signs_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_Subject_variable": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Subject",
+                            "type": "string",
+                            "value": "@concat('\"subject\": {   \"reference\": \"Patient/',triggerBody()?['AzureFHIRID'],'\" }')"
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Initialize_Vital_Signs_Response": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "VitalSignsResponse",
+                            "type": "string",
+                            "value": "{"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Response": {
+                "inputs": {
+                    "body": "@concat('\"Get_VitalSigns_Details\" : [',substring(variables('VitalSignsResponse'),0,sub(length(variables('VitalSignsResponse')),1)),'}]')",
+                    "statusCode": 200
+                },
+                "kind": "Http",
+                "runAfter": {
+                    "Condition": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Response"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {},
+        "triggers": {
+            "manual": {
+                "inputs": {
+                    "schema": {
+                        "properties": {
+                            "AzureFHIRID": {
+                                "type": "string"
+                            },
+                            "EMRFHIRPatientID": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "kind": "Http",
+                "type": "Request"
+            }
+        }
+    },
+    "parameters": {}
+}

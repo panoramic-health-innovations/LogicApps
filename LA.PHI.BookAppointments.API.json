@@ -101,7 +101,7 @@
                         "actions": {
                             "AthenaErrorResponse": {
                                 "inputs": {
-                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Book_Appointment_in_Athena')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" :',if(startsWith(trim(body('Book_Appointment_in_Athena')),'{'),body('Book_Appointment_in_Athena'),concat('\"',body('Book_Appointment_in_Athena'),'\"')),'}}'))",
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Book_Appointment_in_Athena')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" :',if(startsWith(trim(string(body('Book_Appointment_in_Athena'))),'{'),body('Book_Appointment_in_Athena'),concat('\"',body('Book_Appointment_in_Athena'),'\"')),'}}'))",
                                     "statusCode": "@outputs('Book_Appointment_in_Athena')['statusCode']"
                                 },
                                 "kind": "Http",
@@ -132,6 +132,11 @@
                                         "content-type": "application/x-www-form-urlencoded"
                                     },
                                     "method": "PUT",
+                                    "retryPolicy": {
+                                        "count": 1,
+                                        "interval": "PT10S",
+                                        "type": "fixed"
+                                    },
                                     "uri": "@concat('https://api.athenahealth.com/preview1/195900/appointments/',body('Parse_Identifier')?['AppointmentID'],'?appointmenttypeid=',body('Parse_Identifier')?['AppointmentTypeID'],'&ignoreschedulablepermission=true&patientid=',body('Parse_JSON')?['PatientExternalID'])"
                                 },
                                 "runAfter": {
@@ -216,7 +221,7 @@
                             },
                             "ErrorResponse": {
                                 "inputs": {
-                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Book_Appointment')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" :\"',body('Book_Appointment'),'\"}}'))",
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Book_Appointment')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" : ',if(startsWith(trim(string(body('Book_Appointment'))),'{'),body('Book_Appointment'),json(xml(body('Book_Appointment')))),'}}'))",
                                     "statusCode": "@outputs('Book_Appointment')['statusCode']"
                                 },
                                 "kind": "Http",

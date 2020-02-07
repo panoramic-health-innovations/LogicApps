@@ -83,7 +83,7 @@
                     }
                 },
                 "runAfter": {
-                    "Parse_JSON": [
+                    "Get_Access_Token": [
                         "Succeeded"
                     ]
                 },
@@ -127,29 +127,29 @@
                         {
                             "name": "Counter Date",
                             "type": "string",
-                            "value": "Anything"
+                            "value": "@addMinutes(variables('StartDate'),15)"
                         }
                     ]
                 },
                 "runAfter": {
-                    "Initialize_Start_Date": [
+                    "Initialize_Initial_Value": [
                         "Succeeded"
                     ]
                 },
                 "type": "InitializeVariable"
             },
-            "Initialize_End_Date": {
+            "Initialize_Initial_Value": {
                 "inputs": {
                     "variables": [
                         {
-                            "name": "EndDate",
-                            "type": "string",
-                            "value": "@concat(addDays(json(base64ToString(triggerBody()?['ContentData']))['AppointmentDate'],1,'yyyy-MM-dd'),'T00:00:00')"
+                            "name": "InitialValue",
+                            "type": "integer",
+                            "value": 0
                         }
                     ]
                 },
                 "runAfter": {
-                    "Initialize_Appointment_ID": [
+                    "Initialize_Start_Date": [
                         "Succeeded"
                     ]
                 },
@@ -161,56 +161,39 @@
                         {
                             "name": "StartDate",
                             "type": "string",
-                            "value": "@concat(json(base64ToString(triggerBody()?['ContentData']))['AppointmentDate'],'T',json(base64ToString(triggerBody()?['ContentData']))['AppointmentTime'])"
+                            "value": "@concat(addDays(utcNow('yyyy-MM-dd'),1,'yyyy-MM-dd'),'T00:00:00')"
                         }
                     ]
                 },
                 "runAfter": {
-                    "Initialize_End_Date": [
+                    "Max_Limit": [
                         "Succeeded"
                     ]
                 },
                 "type": "InitializeVariable"
             },
-            "Parse_JSON": {
+            "Max_Limit": {
                 "inputs": {
-                    "content": "@triggerBody()",
-                    "schema": {
-                        "properties": {
-                            "Endpoint": {
-                                "type": "string"
-                            },
-                            "FHIRPractitionerRoleID": {
-                                "type": "string"
-                            },
-                            "ProviderIDType": {
-                                "type": "string"
-                            },
-                            "ProviderKey": {
-                                "type": "string"
-                            },
-                            "appointmenttypeid": {
-                                "type": "string"
-                            },
-                            "departmentid": {
-                                "type": "string"
-                            }
-                        },
-                        "type": "object"
-                    }
+                    "variables": [
+                        {
+                            "name": "MaxLimit",
+                            "type": "integer",
+                            "value": 10
+                        }
+                    ]
                 },
                 "runAfter": {
-                    "Get_Access_Token": [
+                    "Initialize_Appointment_ID": [
                         "Succeeded"
                     ]
                 },
-                "type": "ParseJson"
+                "type": "InitializeVariable"
             },
             "Until": {
                 "actions": {
                     "Create_Slots_in_Athena": {
                         "inputs": {
-                            "body": "appointmentdate=@{replace(formatDateTime(substring(string(variables('StartDate')),0,10),'MM/dd/yyyy'),'/','%2F')}&appointmenttime=@{replace(substring(string(variables('StartDate')),11,5),':','%3A')}&appointmenttypeid=@{json(base64ToString(triggerBody()?['ContentData']))['appointmenttypeid']}&departmentid=@{json(base64ToString(triggerBody()?['ContentData']))['departmentid']}&ignoreschedulablepermission=true&providerid=@{json(base64ToString(triggerBody()?['ContentData']))['ProviderKEy']}",
+                            "body": "appointmentdate=@{replace(formatDateTime(substring(string(variables('StartDate')),0,10),'MM/dd/yyyy'),'/','%2F')}&appointmenttime=@{replace(substring(string(variables('StartDate')),11,5),':','%3A')}&appointmenttypeid=@{json(base64ToString(triggerBody()?['ContentData']))['appointmenttypeid']}&departmentid=@{json(base64ToString(triggerBody()?['ContentData']))['departmentid']}&ignoreschedulablepermission=true&providerid=@{json(base64ToString(triggerBody()?['ContentData']))['ProviderID']}",
                             "headers": {
                                 "Authorization": "@concat('Bearer ',body('Get_Access_Token')['access_token'])",
                                 "Content-Type": "application/x-www-form-urlencoded"
@@ -274,6 +257,18 @@
                         },
                         "type": "Http"
                     },
+                    "Increment_variable": {
+                        "inputs": {
+                            "name": "InitialValue",
+                            "value": 1
+                        },
+                        "runAfter": {
+                            "Set_variable": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "IncrementVariable"
+                    },
                     "Set_Athena_Appointment_ID": {
                         "inputs": {
                             "name": "AthenaAppointmentID",
@@ -289,7 +284,7 @@
                     "Set_Counter_Date": {
                         "inputs": {
                             "name": "Counter Date",
-                            "value": "@addMinutes(variables('StartDate'),15)"
+                            "value": "@addMinutes(variables('StartDate'),60)"
                         },
                         "runAfter": {},
                         "type": "SetVariable"
@@ -307,7 +302,7 @@
                         "type": "SetVariable"
                     }
                 },
-                "expression": "@equals(substring(variables('StartDate'), 0, 19), variables('EndDate'))",
+                "expression": "@equals(variables('InitialValue'), variables('MaxLimit'))",
                 "limit": {
                     "count": 1000,
                     "timeout": "PT1H"
@@ -357,7 +352,7 @@
                 },
                 "recurrence": {
                     "frequency": "Minute",
-                    "interval": 3
+                    "interval": 1
                 },
                 "type": "ApiConnection"
             }

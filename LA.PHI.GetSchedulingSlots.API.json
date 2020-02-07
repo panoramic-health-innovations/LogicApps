@@ -20,12 +20,6 @@
                     "content": "@triggerBody()",
                     "schema": {
                         "properties": {
-                            "AppointmentDate": {
-                                "type": "string"
-                            },
-                            "AppointmentTime": {
-                                "type": "string"
-                            },
                             "AppointmentTypeID": {
                                 "type": "string"
                             },
@@ -35,10 +29,10 @@
                             "Endpoint": {
                                 "type": "string"
                             },
-                            "ProviderIDType": {
+                            "ProviderID": {
                                 "type": "string"
                             },
-                            "ProviderKey": {
+                            "ProviderIDType": {
                                 "type": "string"
                             }
                         },
@@ -70,7 +64,7 @@
                             },
                             "Get_Slots_from_Athena": {
                                 "inputs": {
-                                    "body": "appointmentdate=@{formatDateTime(body('Parse_JSON')?['AppointmentDate'],'MM/dd/yyyy')}&appointmenttime=@{body('Parse_JSON')?['AppointmentTime']}&appointmenttypeid=@{body('Parse_JSON')?['AppointmentTypeID']}&departmentid=@{body('Parse_JSON')?['DepartmentID']}&ignoreschedulablepermission=true&providerid=@{body('Parse_JSON')?['ProviderKey']}",
+                                    "body": "appointmentdate=@{utcnow('MM/dd/yyyy')}&appointmenttime=00:00&appointmenttypeid=@{body('Parse_JSON')?['AppointmentTypeID']}&departmentid=@{body('Parse_JSON')?['DepartmentID']}&ignoreschedulablepermission=true&providerid=@{body('Parse_JSON')?['ProviderID']}",
                                     "headers": {
                                         "Authorization": "@concat('Bearer ',body('Get_Athena_Access_Token')['access_token'])",
                                         "Content-Type": "application/x-www-form-urlencoded"
@@ -134,7 +128,7 @@
                                     "body": {
                                         "DepartmentIDs": [],
                                         "EndDate": "",
-                                        "ProviderID": "@body('Parse_JSON')?['ProviderKey']",
+                                        "ProviderID": "@body('Parse_JSON')?['ProviderID']",
                                         "ProviderIDType": "@body('Parse_JSON')?['ProviderIDType']",
                                         "StartDate": "",
                                         "VisitTypeIDs": []
@@ -187,12 +181,6 @@
                 "inputs": {
                     "schema": {
                         "properties": {
-                            "AppointmentDate": {
-                                "type": "string"
-                            },
-                            "AppointmentTime": {
-                                "type": "string"
-                            },
                             "AppointmentTypeID": {
                                 "type": "string"
                             },
@@ -202,10 +190,10 @@
                             "Endpoint": {
                                 "type": "string"
                             },
-                            "ProviderIDType": {
+                            "ProviderID": {
                                 "type": "string"
                             },
-                            "ProviderKey": {
+                            "ProviderIDType": {
                                 "type": "string"
                             }
                         },
