@@ -2,98 +2,18 @@
     "definition": {
         "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
         "actions": {
-            "Condition": {
-                "actions": {
-                    "For_each": {
-                        "actions": {
-                            "Create_Immunization_in_FHIR": {
-                                "inputs": {
-                                    "body": "@replace(string(item()),'\"patient\":null',variables('Patient'))",
-                                    "headers": {
-                                        "Authorization": "Bearer @{body('GetAccessToken')}",
-                                        "Content-Type": "application/json"
-                                    },
-                                    "method": "POST",
-                                    "uri": "https://panoramic-dev.azurehealthcareapis.com/Immunization"
-                                },
-                                "runAfter": {},
-                                "type": "Http"
-                            },
-                            "Set_Immunization_Response": {
-                                "inputs": {
-                                    "name": "ImmunizationResponse",
-                                    "value": "\"FHIRID\" : \"@{body('Create_Immunization_in_FHIR')['id']}\","
-                                },
-                                "runAfter": {
-                                    "Create_Immunization_in_FHIR": [
-                                        "Succeeded"
-                                    ]
-                                },
-                                "type": "AppendToStringVariable"
-                            }
-                        },
-                        "foreach": "@if(equals(int(json(body('Get_Immunization_From_EPIC'))['Bundle']['total']['@value']),1),json(concat('[',string(json(body('Transform_Immunization_XML'))['Immunizations']['Immunization']),']')),json(body('Transform_Immunization_XML'))['Immunizations']['Immunization'])",
-                        "runAfter": {
-                            "Transform_Immunization_XML": [
-                                "Succeeded"
-                            ]
-                        },
-                        "type": "Foreach"
-                    },
-                    "Transform_Immunization_XML": {
-                        "inputs": {
-                            "content": "@{body('Get_Immunization_From_EPIC')}",
-                            "integrationAccount": {
-                                "map": {
-                                    "name": "Immunization_To_ImmunizationTarget"
-                                }
-                            }
-                        },
-                        "runAfter": {},
-                        "type": "Xslt"
-                    }
-                },
-                "else": {
-                    "actions": {
-                        "No_Response_From_EPIC": {
-                            "inputs": {
-                                "name": "ImmunizationResponse",
-                                "value": "\"FHIRID\":\"No Response From EPIC\"}"
-                            },
-                            "runAfter": {},
-                            "type": "AppendToStringVariable"
-                        }
-                    }
-                },
-                "expression": {
-                    "and": [
-                        {
-                            "greater": [
-                                "@int(json(body('Get_Immunization_From_EPIC'))['Bundle']['total']['@value'])",
-                                0
-                            ]
-                        }
-                    ]
-                },
-                "runAfter": {
-                    "Get_Immunization_From_EPIC": [
-                        "Succeeded"
-                    ]
-                },
-                "type": "If"
-            },
-            "EPIC_Access_Token": {
+            "Access_Token": {
                 "inputs": {
                     "variables": [
                         {
-                            "name": "EPICAccessToken",
+                            "name": "AccessToken",
                             "type": "string",
-                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                            "value": "dummy"
                         }
                     ]
                 },
                 "runAfter": {
-                    "Initialize_variable": [
+                    "Initialize_Patient": [
                         "Succeeded"
                     ]
                 },
@@ -105,35 +25,51 @@
                         "audience": "https://azurehealthcareapis.com",
                         "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
                         "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
-                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
                     },
                     "function": {
                         "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
                     }
                 },
                 "runAfter": {
-                    "EPIC_Access_Token": [
+                    "Initialize_RecordID": [
                         "Succeeded"
                     ]
                 },
                 "type": "Function"
             },
-            "Get_Immunization_From_EPIC": {
+            "Get_Endpoint_Details": {
                 "inputs": {
                     "headers": {
-                        "Authorization": "Basic @{variables('EPICAccessToken')}",
-                        "Content-Type": "application/json",
-                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
                     },
                     "method": "GET",
-                    "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Immunization?patient=@{triggerBody()?['EMRFHIRPatientID']}"
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',triggerBody()?['EndpointIdentifier'])"
                 },
                 "runAfter": {
-                    "Initialize_Immunization_Response": [
+                    "GetAccessToken": [
                         "Succeeded"
                     ]
                 },
                 "type": "Http"
+            },
+            "Initialize_Endpoint": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Endpoint",
+                            "type": "string",
+                            "value": "@toUpper(body('Get_Endpoint_Details')['identifier'][0]['value'])"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_Endpoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
             },
             "Initialize_Immunization_Response": {
                 "inputs": {
@@ -146,37 +82,766 @@
                     ]
                 },
                 "runAfter": {
-                    "GetAccessToken": [
+                    "Access_Token": [
                         "Succeeded"
                     ]
                 },
                 "type": "InitializeVariable"
             },
-            "Initialize_variable": {
+            "Initialize_Patient": {
                 "inputs": {
                     "variables": [
                         {
                             "name": "Patient",
                             "type": "string",
-                            "value": "@concat('\"patient\": {   \"reference\": \"Patient/',triggerBody()?['AzureFHIRID'],'\" }')"
+                            "value": "@concat('Patient/',triggerBody()?['AzureFHIRID'])"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Endpoint": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_RecordID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "RecordID",
+                            "type": "string",
+                            "value": "RecordID"
                         }
                     ]
                 },
                 "runAfter": {},
                 "type": "InitializeVariable"
             },
-            "Response": {
-                "inputs": {
-                    "body": "@concat('\"Get_Immunization_Details\" : [',substring(variables('ImmunizationResponse'),0,sub(length(variables('ImmunizationResponse')),1)),'}]')",
-                    "statusCode": 200
+            "Switch": {
+                "cases": {
+                    "AllScripts": {
+                        "actions": {
+                            "AllScripts_Authenticate_User": {
+                                "inputs": {
+                                    "body": {
+                                        "Action": "GetUserAuthentication",
+                                        "AppUserID": "@body('Get_Endpoint_Details')['header'][0]",
+                                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                                        "Data": "",
+                                        "Parameter1": "@body('Get_Endpoint_Details')['header'][1]",
+                                        "Parameter2": "",
+                                        "Parameter3": "",
+                                        "Parameter4": "",
+                                        "Parameter5": "",
+                                        "Parameter6": "",
+                                        "Token": "@decodeBase64(body('AllScripts_Get_Access_Token')['$content'])"
+                                    },
+                                    "headers": {
+                                        "content-type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'MagicJson')"
+                                },
+                                "runAfter": {
+                                    "AllScripts_Get_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "AllScripts_Get_Access_Token": {
+                                "inputs": {
+                                    "body": {
+                                        "Password": "P@n8r@M1cH6@Lta#nn5v@Tf!Ns2Ncp",
+                                        "Username": "Panor-6855-PHITest-test"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'GetToken')"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "AllScripts_Get_Immunization": {
+                                "inputs": {
+                                    "body": {
+                                        "Action": "GetAllergies",
+                                        "AppUserID": "@body('Get_Endpoint_Details')['header'][0]",
+                                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                                        "Data": "",
+                                        "Parameter1": "",
+                                        "Parameter2": "",
+                                        "Parameter3": "",
+                                        "Parameter4": "",
+                                        "Parameter5": "",
+                                        "Parameter6": "",
+                                        "PatientID": "@{triggerBody()?['EMRFHIRPatientID']}",
+                                        "Token": "@decodeBase64(body('AllScripts_Get_Access_Token')['$content'])"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'MagicJson')"
+                                },
+                                "runAfter": {
+                                    "AllScripts_Authenticate_User": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Check_AllScripts_Return_Count": {
+                                "actions": {
+                                    "For_each_AllScripts_Immunization": {
+                                        "actions": {
+                                            "Append_AllScript_FHIRID_to_Response": {
+                                                "inputs": {
+                                                    "name": "ImmunizationResponse",
+                                                    "value": "@concat('\"FHIRID\":\"', body('Create_AllScripts_Immunization_in_FHIR')['id'], '\",')"
+                                                },
+                                                "runAfter": {
+                                                    "Create_AllScripts_Immunization_in_FHIR": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "AppendToStringVariable"
+                                            },
+                                            "Create_AllScripts_Immunization_in_FHIR": {
+                                                "inputs": {
+                                                    "body": {
+                                                        "id": "euRxNz.NRxWg0nSZxuyOQFw3",
+                                                        "identifier": [
+                                                            {
+                                                                "type": {
+                                                                    "text": "externalResourceId"
+                                                                },
+                                                                "value": "euRxNz.NRxWg0nSZxuyOQFw3"
+                                                            },
+                                                            {
+                                                                "value": "euRxNz.NRxWg0nSZxuyOQFw3"
+                                                            }
+                                                        ],
+                                                        "lotNumber": "125",
+                                                        "occurrenceDateTime": "2006-07-07",
+                                                        "patient": {
+                                                            "reference": "Patient/8f2b128d-05fc-4906-a058-76ae7bb05263"
+                                                        },
+                                                        "resourceType": "Immunization",
+                                                        "route": {
+                                                            "coding": [
+                                                                {
+                                                                    "code": "2",
+                                                                    "display": "Intramuscular",
+                                                                    "system": "urn:oid:1.2.840.114350.1.13.0.1.7.10.768076.4030"
+                                                                }
+                                                            ]
+                                                        },
+                                                        "site": {
+                                                            "coding": [
+                                                                {
+                                                                    "code": "7",
+                                                                    "display": "Left deltoid",
+                                                                    "system": "urn:oid:1.2.840.114350.1.13.0.1.7.10.768076.4040"
+                                                                }
+                                                            ]
+                                                        },
+                                                        "status": "completed",
+                                                        "vaccineCode": {
+                                                            "coding": [
+                                                                {
+                                                                    "code": "09",
+                                                                    "system": "http://hl7.org/fhir/sid/cvx"
+                                                                }
+                                                            ],
+                                                            "text": "Td"
+                                                        }
+                                                    },
+                                                    "headers": {
+                                                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                                                        "Content-Type": "application/json"
+                                                    },
+                                                    "method": "PUT",
+                                                    "uri": "https://panoramic-dev.azurehealthcareapis.com/Immunization?identifier=@{items('For_each_AllScripts_Immunization')['IMMUNIZATION_ID']}"
+                                                },
+                                                "runAfter": {},
+                                                "type": "Http"
+                                            }
+                                        },
+                                        "foreach": "@body('AllScripts_Get_Immunization')[0]['getimmunizationinfo']",
+                                        "runAfter": {},
+                                        "type": "Foreach"
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Allscripts_No_Response": {
+                                            "inputs": {
+                                                "name": "ImmunizationResponse",
+                                                "value": "}"
+                                            },
+                                            "runAfter": {},
+                                            "type": "AppendToStringVariable"
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "contains": [
+                                                "@string(body('AllScripts_Get_Immunization'))",
+                                                "IMMUNIZATION_ID"
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "AllScripts_Get_Immunization": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Return_AllScripts_Success_Response": {
+                                "inputs": {
+                                    "body": "@concat('{\"Get_Immunization_Details\" : [',substring(variables('ImmunizationResponse'),0,sub(length(variables('ImmunizationResponse')),1)),'}]}')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Check_AllScripts_Return_Count": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "ALLSCRIPTS"
+                    },
+                    "Athena": {
+                        "actions": {
+                            "Check_Total_Count_in_Athena_Immunzation_Response": {
+                                "actions": {
+                                    "For_Each_Athena_Immunization_Record": {
+                                        "actions": {
+                                            "Append_FHIR_ID_to_Immunization_Response": {
+                                                "inputs": {
+                                                    "name": "ImmunizationResponse",
+                                                    "value": "@concat('\"FHIRID\":\"', body('Create_Athena_Immunization_in_FHIR')['id'], '\",')"
+                                                },
+                                                "runAfter": {
+                                                    "Create_Athena_Immunization_in_FHIR": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "AppendToStringVariable"
+                                            },
+                                            "Create_Athena_Immunization_in_FHIR": {
+                                                "inputs": {
+                                                    "body": "@replace(string(body('Get_Athena_Immunization_Response_in_r4_Format')),concat('Patient/',triggerBody()?['EMRFHIRPatientID']),variables('Patient'))",
+                                                    "headers": {
+                                                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                                                        "Content-Type": "application/json"
+                                                    },
+                                                    "method": "PUT",
+                                                    "uri": "https://panoramic-dev.azurehealthcareapis.com/Immunization?identifier=@{variables('RecordID')}"
+                                                },
+                                                "runAfter": {
+                                                    "Set_Athena_Record_ID": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "Http"
+                                            },
+                                            "Get_Athena_Immunization_Response_in_r4_Format": {
+                                                "inputs": {
+                                                    "body": "@items('For_Each_Athena_Immunization_Record')['resource']",
+                                                    "headers": {
+                                                        "Authorization": "Bearer @{body('GetAccessToken')}"
+                                                    },
+                                                    "method": "POST",
+                                                    "uri": "https://fhirconverter-panoramic.azurewebsites.net/converter/dstu2"
+                                                },
+                                                "runAfter": {},
+                                                "type": "Http"
+                                            },
+                                            "Set_Athena_Record_ID": {
+                                                "inputs": {
+                                                    "name": "RecordID",
+                                                    "value": "@{body('Get_Athena_Immunization_Response_in_r4_Format')['id']}"
+                                                },
+                                                "runAfter": {
+                                                    "Get_Athena_Immunization_Response_in_r4_Format": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "SetVariable"
+                                            }
+                                        },
+                                        "foreach": "@json(string(body('Get_Immunization_Details_from_Athena')['entry']))",
+                                        "runAfter": {},
+                                        "type": "Foreach"
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "No_Athena_Response": {
+                                            "inputs": {
+                                                "name": "ImmunizationResponse",
+                                                "value": "}"
+                                            },
+                                            "runAfter": {},
+                                            "type": "AppendToStringVariable"
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "greater": [
+                                                "@int(body('Get_Immunization_Details_from_Athena')['total'])",
+                                                0
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Get_Immunization_Details_from_Athena": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Get_Access_Token_For_Athena": {
+                                "inputs": {
+                                    "body": "grant_type=client_credentials&client_id=wffujq3bf5hqxbkvcqb2qta3&client_secret=f4GgJBxFF9Rcp4B",
+                                    "headers": {
+                                        "content-type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://api.athenahealth.com/oauthpreview/token"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Get_Immunization_Details_from_Athena": {
+                                "inputs": {
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('Get_Access_Token_For_Athena')['access_token']}"
+                                    },
+                                    "method": "GET",
+                                    "uri": "https://api.athenahealth.com/preview1/195900/102/fhir/dstu2/Immunization?patient=@{triggerBody()?['EMRFHIRPatientID']}"
+                                },
+                                "runAfter": {
+                                    "Get_Access_Token_For_Athena": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Return_Athena_Immunization_Response": {
+                                "inputs": {
+                                    "body": "@concat('{\"Get_Immunization_Details\" : [',substring(variables('ImmunizationResponse'),0,sub(length(variables('ImmunizationResponse')),1)),'}]}')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Check_Total_Count_in_Athena_Immunzation_Response": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "ATHENA"
+                    },
+                    "CERNER": {
+                        "actions": {
+                            "Check_Total_Count_in_CERNER_Immunization_Response": {
+                                "actions": {
+                                    "For_Each_Cerner_Immunization_Response": {
+                                        "actions": {
+                                            "Append_FHIR_Response_to_CERNER_Immunization_": {
+                                                "inputs": {
+                                                    "name": "ImmunizationResponse",
+                                                    "value": "@concat('\"FHIRID\":\"', body('Create_CERNER_Immunization_in_FHIR')['id'], '\",')"
+                                                },
+                                                "runAfter": {
+                                                    "Create_CERNER_Immunization_in_FHIR": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "AppendToStringVariable"
+                                            },
+                                            "Create_CERNER_Immunization_in_FHIR": {
+                                                "inputs": {
+                                                    "body": "@json(xml(string(substring(string(body('Transform_CERNER_XML')),39))))['ImmunizationResponse']",
+                                                    "headers": {
+                                                        "Authorization": "Bearer @{body('GetAccessToken')}"
+                                                    },
+                                                    "method": "PUT",
+                                                    "uri": "https://panoramic-dev.azurehealthcareapis.com/Immunization?identifier=@{item()['resource']['id']}"
+                                                },
+                                                "runAfter": {
+                                                    "Transform_CERNER_XML": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "Http"
+                                            },
+                                            "Set_CERNER_Record_ID": {
+                                                "inputs": {
+                                                    "name": "RecordID",
+                                                    "value": "@item()['resource']['id']"
+                                                },
+                                                "runAfter": {},
+                                                "type": "SetVariable"
+                                            },
+                                            "Transform_CERNER_XML": {
+                                                "inputs": {
+                                                    "content": "@string(xml(json(string(concat('{\"ImmunizationResponse\":',string(item()['resource']),'}')))))",
+                                                    "integrationAccount": {
+                                                        "map": {
+                                                            "name": "CERNER_ImmunizationResponse_To_FHIRImmunizationResponse"
+                                                        }
+                                                    }
+                                                },
+                                                "runAfter": {
+                                                    "Set_CERNER_Record_ID": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "Xslt"
+                                            }
+                                        },
+                                        "foreach": "@json(string(body('Get_Immunization_from_CERNER')['entry']))",
+                                        "runAfter": {},
+                                        "type": "Foreach"
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Append_to_string_variable": {
+                                            "inputs": {
+                                                "name": "ImmunizationResponse",
+                                                "value": "}"
+                                            },
+                                            "runAfter": {},
+                                            "type": "AppendToStringVariable"
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "greater": [
+                                                "@int(body('Get_Immunization_from_CERNER')['total'])",
+                                                0
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Get_Immunization_from_CERNER": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Get_CERNER_Access_Token": {
+                                "inputs": {
+                                    "headers": {
+                                        "content-type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://api.sandboxcernercare.com/oauth/access?oauth_consumer_key=f3bbbf78-831e-4892-9864-086e5af423e7&oauth_signature_method=PLAINTEXT&oauth_signature=baT1MXO-PcvgptQrBtqgha_YRo3EDPSV%26"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Get_Immunization_from_CERNER": {
+                                "inputs": {
+                                    "headers": {
+                                        "Accept": "application/json+fhir",
+                                        "Authorization": "Bearer @{body('Get_CERNER_Access_Token')['$formdata'][0]['value']}"
+                                    },
+                                    "method": "GET",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'Immunization?patient=1316020')"
+                                },
+                                "runAfter": {
+                                    "Get_CERNER_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Return_CERNER_Immunization_Response": {
+                                "inputs": {
+                                    "body": "@concat('{\"Get_Immunization_Details\" : [',substring(variables('ImmunizationResponse'),0,sub(length(variables('ImmunizationResponse')),1)),'}]}')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Check_Total_Count_in_CERNER_Immunization_Response": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "CERNERPHR"
+                    },
+                    "DRCHRONO": {
+                        "actions": {
+                            "Check_Dr_Chrono_Count_for_Immunization": {
+                                "actions": {
+                                    "For_each_Immunization_in_DrChrono_Response": {
+                                        "actions": {},
+                                        "foreach": "@body('Get_DrCHRONO_Immunization')['results']",
+                                        "runAfter": {},
+                                        "type": "Foreach"
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "No_Response_From_DrChrono": {
+                                            "inputs": {
+                                                "name": "ImmunizationResponse",
+                                                "value": "}"
+                                            },
+                                            "runAfter": {},
+                                            "type": "AppendToStringVariable"
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "contains": [
+                                                "@body('Get_DrCHRONO_Immunization')",
+                                                "resourceType"
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Get_DrCHRONO_Immunization": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Get_DrCHRONO_Immunization": {
+                                "inputs": {
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('LA.PHI.DRCHRONO.RefreshAccessToken')['AccessToken']}"
+                                    },
+                                    "method": "GET",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'patient_vaccine_records?patient=87561170')"
+                                },
+                                "runAfter": {
+                                    "LA.PHI.DRCHRONO.RefreshAccessToken": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "LA.PHI.DRCHRONO.RefreshAccessToken": {
+                                "inputs": {
+                                    "body": {
+                                        "RefreshToken": "@body('Get_Endpoint_Details')['header'][1]"
+                                    },
+                                    "host": {
+                                        "triggerName": "manual",
+                                        "workflow": {
+                                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.DRCHRONO.RefreshAccessToken"
+                                        }
+                                    }
+                                },
+                                "runAfter": {},
+                                "type": "Workflow"
+                            },
+                            "Send_DRChrono_Response": {
+                                "inputs": {
+                                    "body": "@concat('{\"Get_Immunization_Details\" : [',substring(variables('ImmunizationResponse'),0,sub(length(variables('ImmunizationResponse')),1)),'}]}')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Check_Dr_Chrono_Count_for_Immunization": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "DRCHRONO"
+                    },
+                    "EPIC": {
+                        "actions": {
+                            "Condition": {
+                                "actions": {
+                                    "For_each": {
+                                        "actions": {
+                                            "Create_Immunization_in_FHIR": {
+                                                "inputs": {
+                                                    "body": "@replace(string(body('Get_EPIC_Immunization_Response_in_R4_Format')),'\"id\"',concat('\"patient\": {   \"reference\":\"',variables('Patient'),'\"}',',\"id\"'))",
+                                                    "headers": {
+                                                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                                                        "Content-Type": "application/json"
+                                                    },
+                                                    "method": "PUT",
+                                                    "uri": "https://panoramic-dev.azurehealthcareapis.com/Immunization?identifier=@{items('For_each')['id']}"
+                                                },
+                                                "runAfter": {
+                                                    "Get_EPIC_Immunization_Response_in_R4_Format": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "Http"
+                                            },
+                                            "Get_EPIC_Immunization_Response_in_R4_Format": {
+                                                "inputs": {
+                                                    "body": "@replace(replace(string(item()),'EXTERNALEMRID',items('For_each')['id']),'\"ERID\"','{\"text\": \"externalResourceId\"}')",
+                                                    "headers": {
+                                                        "Authorization": "Bearer @{body('GetAccessToken')}"
+                                                    },
+                                                    "method": "POST",
+                                                    "uri": "https://fhirconverter-panoramic.azurewebsites.net/converter/stu3"
+                                                },
+                                                "runAfter": {
+                                                    "Set_Record_ID": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "Http"
+                                            },
+                                            "Set_Immunization_Response": {
+                                                "inputs": {
+                                                    "name": "ImmunizationResponse",
+                                                    "value": "\"FHIRID\" : \"@{body('Create_Immunization_in_FHIR')['id']}\","
+                                                },
+                                                "runAfter": {
+                                                    "Create_Immunization_in_FHIR": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "AppendToStringVariable"
+                                            },
+                                            "Set_Record_ID": {
+                                                "inputs": {
+                                                    "name": "RecordID",
+                                                    "value": "@{items('For_each')['id']}"
+                                                },
+                                                "runAfter": {},
+                                                "type": "SetVariable"
+                                            }
+                                        },
+                                        "foreach": "@if(equals(int(json(body('Get_Immunization_From_EPIC'))['Bundle']['total']['@value']),1),json(concat('[',string(json(body('Transform_EPIC_Immunization_To_FHIR_XML'))['Immunizations']['Immunization']),']')),json(body('Transform_EPIC_Immunization_To_FHIR_XML'))['Immunizations']['Immunization'])",
+                                        "runAfter": {
+                                            "Transform_EPIC_Immunization_To_FHIR_XML": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Foreach"
+                                    },
+                                    "Transform_EPIC_Immunization_To_FHIR_XML": {
+                                        "inputs": {
+                                            "content": "@{body('Get_Immunization_From_EPIC')}",
+                                            "integrationAccount": {
+                                                "map": {
+                                                    "name": "Immunization_To_ImmunizationTarget"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "type": "Xslt"
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "No_Response_From_EPIC": {
+                                            "inputs": {
+                                                "name": "ImmunizationResponse",
+                                                "value": "}"
+                                            },
+                                            "runAfter": {},
+                                            "type": "AppendToStringVariable"
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "greater": [
+                                                "@int(json(body('Get_Immunization_From_EPIC'))['Bundle']['total']['@value'])",
+                                                0
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Get_Immunization_From_EPIC": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Get_Immunization_From_EPIC": {
+                                "inputs": {
+                                    "headers": {
+                                        "Authorization": "Basic @{variables('AccessToken')}",
+                                        "Content-Type": "application/json",
+                                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                                    },
+                                    "method": "GET",
+                                    "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,63),'FHIR/STU3/Immunization?patient=',triggerBody()?['EMRFHIRPatientID'])"
+                                },
+                                "runAfter": {
+                                    "Set_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Response": {
+                                "inputs": {
+                                    "body": "@concat('\"Get_Immunization_Details\" : [',substring(variables('ImmunizationResponse'),0,sub(length(variables('ImmunizationResponse')),1)),'}]')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Condition": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Set_Access_Token": {
+                                "inputs": {
+                                    "name": "AccessToken",
+                                    "value": "@base64(concat('emp$',substring(body('Get_Endpoint_Details')['header'][0],9),':',substring(body('Get_Endpoint_Details')['header'][1],9)))"
+                                },
+                                "runAfter": {},
+                                "type": "SetVariable"
+                            }
+                        },
+                        "case": "EPIC"
+                    }
                 },
-                "kind": "Http",
+                "default": {
+                    "actions": {}
+                },
+                "expression": "@variables('Endpoint')",
                 "runAfter": {
-                    "Condition": [
+                    "Initialize_Immunization_Response": [
                         "Succeeded"
                     ]
                 },
-                "type": "Response"
+                "type": "Switch"
             }
         },
         "contentVersion": "1.0.0.0",
@@ -191,6 +856,9 @@
                                 "type": "string"
                             },
                             "EMRFHIRPatientID": {
+                                "type": "string"
+                            },
+                            "EndpointIdentifier": {
                                 "type": "string"
                             }
                         },
