@@ -2,22 +2,175 @@
     "definition": {
         "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
         "actions": {
-            "EPIC_AccessToken": {
+            "AccessToken": {
                 "inputs": {
                     "variables": [
                         {
-                            "name": "EPICAccessToken",
+                            "name": "AccessToken",
                             "type": "string",
-                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                            "value": "Dummy"
                         }
                     ]
                 },
                 "runAfter": {
-                    "Read_SSN": [
+                    "Read_Telecom": [
                         "Succeeded"
                     ]
                 },
                 "type": "InitializeVariable"
+            },
+            "Check_Validity_Of_Input": {
+                "actions": {},
+                "else": {
+                    "actions": {
+                        "Return_Bad_Format_Error": {
+                            "inputs": {
+                                "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"',triggerBody()?['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}'))",
+                                "statusCode": 200
+                            },
+                            "kind": "Http",
+                            "runAfter": {},
+                            "type": "Response"
+                        },
+                        "Terminate": {
+                            "inputs": {
+                                "runError": {
+                                    "code": "400",
+                                    "message": "Bad Format"
+                                },
+                                "runStatus": "Failed"
+                            },
+                            "runAfter": {
+                                "Return_Bad_Format_Error": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@json(string(body('LA.PHI.General.CheckEndpointAvailability')))['Header']['Status']",
+                                "Success"
+                            ]
+                        },
+                        {
+                            "equals": [
+                                "@body('ValidateInput')",
+                                "Success"
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "LA.PHI.General.CheckEndpointAvailability": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(triggerBody()?['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Get_Endpoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "Check_Validity_Of_Input": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "Get_Endpoint_Details": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',triggerBody()?['EndpointIdentifier'])"
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "LA.PHI.General.CheckEndpointAvailability": {
+                "inputs": {
+                    "body": {
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.General.CheckEndpointAvailability"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "ValidateInput": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "Parse_Identifiers": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "DOB": {
+                                "type": "string"
+                            },
+                            "DepartmentID": {
+                                "type": "string"
+                            },
+                            "FirstName": {
+                                "type": "string"
+                            },
+                            "LastName": {
+                                "type": "string"
+                            },
+                            "PatientIDType": {
+                                "type": "string"
+                            },
+                            "SSN": {
+                                "type": "string"
+                            },
+                            "Telecom": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
             },
             "Read_DOB": {
                 "inputs": {
@@ -25,7 +178,7 @@
                         {
                             "name": "DOB",
                             "type": "string",
-                            "value": "@triggerBody()?['DOB']"
+                            "value": "@body('Parse_Identifiers')?['DOB']"
                         }
                     ]
                 },
@@ -42,7 +195,7 @@
                         {
                             "name": "DepartmentID",
                             "type": "string",
-                            "value": "@triggerBody()?['DepartmentID']"
+                            "value": "@body('Parse_Identifiers')?['DepartmentID']"
                         }
                     ]
                 },
@@ -57,13 +210,17 @@
                 "inputs": {
                     "variables": [
                         {
-                            "name": "EndPointAddress",
+                            "name": "EndPoint",
                             "type": "string",
-                            "value": "@triggerBody()?['Endpoint']"
+                            "value": "@toUpper(body('Get_Endpoint_Details')['identifier'][0]['value'])"
                         }
                     ]
                 },
-                "runAfter": {},
+                "runAfter": {
+                    "Parse_Identifiers": [
+                        "Succeeded"
+                    ]
+                },
                 "type": "InitializeVariable"
             },
             "Read_First_Name": {
@@ -72,7 +229,7 @@
                         {
                             "name": "FirstName",
                             "type": "string",
-                            "value": "@triggerBody()?['FirstName']"
+                            "value": "@body('Parse_Identifiers')?['FirstName']"
                         }
                     ]
                 },
@@ -89,7 +246,7 @@
                         {
                             "name": "LastName",
                             "type": "string",
-                            "value": "@triggerBody()?['LastName']"
+                            "value": "@body('Parse_Identifiers')?['LastName']"
                         }
                     ]
                 },
@@ -106,7 +263,7 @@
                         {
                             "name": "PatientIDType",
                             "type": "string",
-                            "value": "@triggerBody()?['PatientIDType']"
+                            "value": "@body('Parse_Identifiers')?['PatientIDType']"
                         }
                     ]
                 },
@@ -123,7 +280,7 @@
                         {
                             "name": "SSN",
                             "type": "string",
-                            "value": "@triggerBody()?['SSN']"
+                            "value": "@body('Parse_Identifiers')?['SSN']"
                         }
                     ]
                 },
@@ -134,18 +291,65 @@
                 },
                 "type": "InitializeVariable"
             },
-            "Set_XPath_Query": {
+            "Read_Telecom": {
                 "inputs": {
                     "variables": [
                         {
-                            "name": "XpathQuery",
+                            "name": "Telecom",
+                            "type": "string",
+                            "value": "@body('Parse_Identifiers')?['Telecom']"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Read_SSN": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Return_Parsing_Error": {
+                "inputs": {
+                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"',triggerBody()?['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}'))",
+                    "statusCode": 200
+                },
+                "kind": "Http",
+                "runAfter": {
+                    "Parse_Identifiers": [
+                        "Failed"
+                    ]
+                },
+                "type": "Response"
+            },
+            "Set_XPath_Query_EPI": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "XpathQueryEPI",
                             "type": "string",
                             "value": "@if(equals(variables('PatientIDType'),'EPI'),'string(//*[local-name()=\"Bundle\"]/*[local-name()=\"entry\"]/*[local-name()=\"resource\"]/*[local-name()=\"Patient\"]/*[local-name()=\"identifier\"][*[local-name()=\"type\"]/*[local-name()=\"text\"]/@*[local-name()=\"value\"]=\"EPIC\"]/*[local-name()=\"value\"]/@*[local-name()=\"value\"])',concat('string(//*[local-name()=\"Bundle\"]/*[local-name()=\"entry\"]/*[local-name()=\"resource\"]/*[local-name()=\"Patient\"]/*[local-name()=\"identifier\"][*[local-name()=\"type\"]/*[local-name()=\"text\"]/@*[local-name()=\"value\"]=\"',variables('PatientIDType'),'\"]/*[local-name()=\"value\"]/@*[local-name()=\"value\"])'))"
                         }
                     ]
                 },
                 "runAfter": {
-                    "EPIC_AccessToken": [
+                    "AccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Set_XPath_Query_FHIR": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "XpathQueryFHIR",
+                            "type": "string",
+                            "value": "@'string(//*[local-name()=\"Bundle\"]/*[local-name()=\"entry\"]/*[local-name()=\"resource\"]/*[local-name()=\"Patient\"]/*[local-name()=\"identifier\"][*[local-name()=\"type\"]/*[local-name()=\"text\"]/@*[local-name()=\"value\"]=\"FHIR\"]/*[local-name()=\"value\"]/@*[local-name()=\"value\"])'"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Set_XPath_Query_EPI": [
                         "Succeeded"
                     ]
                 },
@@ -153,6 +357,108 @@
             },
             "Switch": {
                 "cases": {
+                    "AllScripts": {
+                        "actions": {
+                            "Authenticate_Credentials": {
+                                "inputs": {
+                                    "body": {
+                                        "Action": "GetUserAuthentication",
+                                        "AppUserID": "@body('Get_Endpoint_Details')['header'][0]",
+                                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                                        "Data": "",
+                                        "Parameter1": "@body('Get_Endpoint_Details')['header'][1]",
+                                        "Parameter2": "",
+                                        "Parameter3": "",
+                                        "Parameter4": "",
+                                        "Parameter5": "",
+                                        "Parameter6": "",
+                                        "Token": "@decodeBase64(body('Get_AllScripts_Access_Token')['$content'])"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'MagicJson')"
+                                },
+                                "runAfter": {
+                                    "Get_AllScripts_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Get_AllScripts_Access_Token": {
+                                "inputs": {
+                                    "body": {
+                                        "Password": "P@n8r@M1cH6@Lta#nn5v@Tf!Ns2Ncp",
+                                        "Username": "Panor-6855-PHITest-test"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'GetToken')"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Get_AllScripts_Patient_Details": {
+                                "inputs": {
+                                    "body": {
+                                        "Action": "SearchPatients",
+                                        "AppUserID": "@body('Get_Endpoint_Details')['header'][0]",
+                                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                                        "Data": "",
+                                        "Parameter1": "@concat(variables('LastName'),',',variables('FirstName'))",
+                                        "Parameter2": "",
+                                        "Parameter3": "",
+                                        "Parameter4": "",
+                                        "Parameter5": "",
+                                        "Parameter6": "",
+                                        "Token": "@decodeBase64(body('Get_AllScripts_Access_Token')['$content'])"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'MagicJson')"
+                                },
+                                "runAfter": {
+                                    "Authenticate_Credentials": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Return_AllScript_Error_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"AllScripts\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Get_AllScripts_Patient_Details')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',body('Get_AllScripts_Patient_Details'),'\"}}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_AllScripts_Patient_Details": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Return_AllScript_Success_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"AllScripts\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_AllScripts_Patient_Details')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',body('Get_AllScripts_Patient_Details')[0]['searchpatientsinfo'][0]['ID'],'\"}}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_AllScripts_Patient_Details": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "ALLSCRIPTS"
+                    },
                     "Athena": {
                         "actions": {
                             "Check_Patient_Count": {
@@ -160,7 +466,7 @@
                                     "Patient_Found_Response": {
                                         "inputs": {
                                             "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_Patient_Details')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',body('Get_Patient_Details')['patients'][0]['patientid'],'\"}}'))",
-                                            "statusCode": "@outputs('Get_Patient_Details')['statusCode']"
+                                            "statusCode": 200
                                         },
                                         "kind": "Http",
                                         "runAfter": {},
@@ -171,13 +477,13 @@
                                     "actions": {
                                         "Create_Patient": {
                                             "inputs": {
-                                                "body": "departmentid=@{variables('DepartmentID')}&dob=@{formatDateTime(triggerBody()?['DOB'],'MM/dd/yyyy')}&firstname=@{variables('FirstName')}&lastname=@{variables('LastName')}&ssn=@{variables('SSN')}",
+                                                "body": "departmentid=@{variables('DepartmentID')}&dob=@{formatDateTime(body('Parse_Identifiers')?['DOB'],'MM/dd/yyyy')}&firstname=@{variables('FirstName')}&lastname=@{variables('LastName')}&ssn=@{variables('SSN')}",
                                                 "headers": {
                                                     "Authorization": "Bearer @{body('Parse_JSON')?['access_token']}",
                                                     "Content-Type": "application/x-www-form-urlencoded"
                                                 },
                                                 "method": "POST",
-                                                "uri": "https://api.athenahealth.com/preview1/195900/patients"
+                                                "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,38),'195900/patients')"
                                             },
                                             "runAfter": {},
                                             "type": "Http"
@@ -185,7 +491,7 @@
                                         "Return_Athena_Create_Patient_Error_Response": {
                                             "inputs": {
                                                 "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Create_Patient')['statusCode'],'\" },\"Body\":{ \"Error Description\" : \"',body('Create_Patient'),'\"}}'))",
-                                                "statusCode": "@outputs('Create_Patient')['statusCode']"
+                                                "statusCode": 200
                                             },
                                             "kind": "Http",
                                             "runAfter": {
@@ -198,7 +504,7 @@
                                         "Return_Athena_Create_Patient_Response": {
                                             "inputs": {
                                                 "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Create_Patient')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',body('Create_Patient')[0]['patientid'],'\"}}'))",
-                                                "statusCode": "@outputs('Create_Patient')['statusCode']"
+                                                "statusCode": 200
                                             },
                                             "kind": "Http",
                                             "runAfter": {
@@ -234,7 +540,7 @@
                                         "content-type": "application/x-www-form-urlencoded"
                                     },
                                     "method": "POST",
-                                    "uri": "https://api.athenahealth.com/oauthpreview/token"
+                                    "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,28),'/oauthpreview/token')"
                                 },
                                 "runAfter": {},
                                 "type": "Http"
@@ -245,7 +551,7 @@
                                         "Authorization": "Bearer @{body('Parse_JSON')?['access_token']}"
                                     },
                                     "method": "GET",
-                                    "uri": "@concat('https://api.athenahealth.com/preview1/195900/patients?firstname=',variables('FirstName'),'&lastname=',variables('LastName'),'&dob=',formatDateTime(triggerBody()?['DOB'],'MM/dd/yyyy'),'&ssn=',variables('SSN'))"
+                                    "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,38),'195900/patients?firstname=',variables('FirstName'),'&lastname=',variables('LastName'),'&dob=',formatDateTime(body('Parse_Identifiers')?['DOB'],'MM/dd/yyyy'),'&ssn=',variables('SSN'))"
                                 },
                                 "runAfter": {
                                     "Parse_JSON": [
@@ -285,14 +591,136 @@
                         },
                         "case": "ATHENA"
                     },
+                    "Cerner": {
+                        "actions": {
+                            "Get_Cerner_Access_Token": {
+                                "inputs": {
+                                    "body": "grant_type=client_credentials&scope=system%2FPatient.read%20system%2FObservation.read",
+                                    "headers": {
+                                        "Accept": "application/json",
+                                        "Authorization": "@concat('Basic ', body('Get_Endpoint_Details')['header'][1])",
+                                        "Content-Type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat('https://authorization.sandboxcerner.com/tenants/',body('Get_Endpoint_Details')['header'][0],'/protocols/oauth2/profiles/smart-v1/token')"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Get_Cerner_Patient_Details": {
+                                "inputs": {
+                                    "headers": {
+                                        "Accept": "application/json+fhir",
+                                        "Authorization": "Bearer @{body('Get_Cerner_Access_Token')['access_token']}"
+                                    },
+                                    "method": "GET",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'Patient?','family=',variables('LastName'),'&given=',variables('FirstName'),'&birthDate=',variables('DOB'))"
+                                },
+                                "runAfter": {
+                                    "Get_Cerner_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Return_Cerner_Patient_Error_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"CERNER\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Get_Cerner_Patient_Details')['statusCode'],'\" },\"Body\":{ \"Description\" : \"',body('Get_Cerner_Patient_Details')['issue'][0]['details']['text'],'\"}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Cerner_Patient_Details": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Return_Cerner_Patient_Success_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"CERNER\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_Cerner_Patient_Details')['statusCode'],'\" },\"Body\":{ \"PatientExternalID\" : \"',body('Get_Cerner_Patient_Details')['entry'][0]['resource']['id'],'\"}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Cerner_Patient_Details": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "CERNER"
+                    },
+                    "DrCHRONO": {
+                        "actions": {
+                            "Get_Patient_From_DrChrono": {
+                                "inputs": {
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('LA.PHI.DRCHRONO.RefreshAccessToken')['AccessToken']}"
+                                    },
+                                    "method": "GET",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'patients?first_name=Amy&last_name=Smith&date_of_birth=1952-09-02')"
+                                },
+                                "runAfter": {
+                                    "LA.PHI.DRCHRONO.RefreshAccessToken": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "LA.PHI.DRCHRONO.RefreshAccessToken": {
+                                "inputs": {
+                                    "body": {
+                                        "RefreshToken": "@body('Get_Endpoint_Details')['header'][1]"
+                                    },
+                                    "host": {
+                                        "triggerName": "manual",
+                                        "workflow": {
+                                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.DRCHRONO.RefreshAccessToken"
+                                        }
+                                    }
+                                },
+                                "runAfter": {},
+                                "type": "Workflow"
+                            },
+                            "Send_DrChrono_Patient_ErrorResponse": {
+                                "inputs": {
+                                    "body": "@body('Get_Patient_From_DrChrono')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Patient_From_DrChrono": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Send_DrChrono_Patient_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"DRCHRONO\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_Patient_From_DrChrono')['statusCode'],'\" },\"Body\":{ \"PatientExternalID\" : \"',body('Get_Patient_From_DrChrono')['results'][0]['id'],'\"}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Patient_From_DrChrono": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "DRCHRONO"
+                    },
                     "Epic": {
                         "actions": {
                             "Condition": {
                                 "actions": {
                                     "Patient_Found_in_EPIC": {
                                         "inputs": {
-                                            "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Search_Patient')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',xpath(outputs('Search_Patient')['body'],variables('XpathQuery')),'\" , \"PatientFHIRId\": \"',json(outputs('Search_Patient')['body'])['Bundle']['entry']['resource']['Patient']['id']['@value'],'\"}}'))",
-                                            "statusCode": "@outputs('Search_Patient')['statusCode']"
+                                            "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Search_Patient')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',xpath(outputs('Search_Patient')['body'],variables('XpathQueryEPI')),'\" , \"PatientFHIRId\": \"',xpath(outputs('Search_Patient')['body'],variables('XpathQueryFHIR')),'\"}}'))",
+                                            "statusCode": 200
                                         },
                                         "kind": "Http",
                                         "runAfter": {},
@@ -324,15 +752,21 @@
                                                         "First": "@variables('FirstName')",
                                                         "LastName": "@variables('LastName')"
                                                     },
-                                                    "SSN": "@variables('SSN')"
+                                                    "telecom": [
+                                                        {
+                                                            "system": "phone",
+                                                            "use": "home",
+                                                            "value": "@variables('Telecom')"
+                                                        }
+                                                    ]
                                                 },
                                                 "headers": {
-                                                    "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                                    "Authorization": "Basic @{variables('AccessToken')}",
                                                     "Content-Type": "application/json",
                                                     "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
                                                 },
                                                 "method": "POST",
-                                                "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/epic/2012/EMPI/External/PatientCreate/Patient/Create"
+                                                "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,68),'2012/EMPI/External/PatientCreate/Patient/Create')"
                                             },
                                             "runAfter": {},
                                             "type": "Http"
@@ -340,7 +774,7 @@
                                         "Error_Response_from_EPIC": {
                                             "inputs": {
                                                 "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Create_Patient_in_EPIC')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" : ',if(startsWith(trim(string(body('Create_Patient_in_EPIC'))),'{'),body('Create_Patient_in_EPIC'),json(xml(body('Create_Patient_in_EPIC')))),'}}'))",
-                                                "statusCode": "@outputs('Create_Patient_in_EPIC')['statusCode']"
+                                                "statusCode": 200
                                             },
                                             "kind": "Http",
                                             "runAfter": {
@@ -365,12 +799,12 @@
                                         "Search_Created_Patient": {
                                             "inputs": {
                                                 "headers": {
-                                                    "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                                    "Authorization": "Basic @{variables('AccessToken')}",
                                                     "Content-Type": "application/json",
                                                     "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
                                                 },
                                                 "method": "GET",
-                                                "uri": "@{concat('https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Patient?','active=true&ssn=',variables('SSN'),'&family=',variables('LastName'),'&given=',variables('FirstName'),'&birthdate=',variables('DOB'))}"
+                                                "uri": "@{concat(substring(body('Get_Endpoint_Details')['address'],0,63),'FHIR/STU3/Patient?','active=true&telecom=',variables('Telecom'),'&family=',variables('LastName'),'&given=',variables('FirstName'),'&birthdate=',variables('DOB'))}"
                                             },
                                             "runAfter": {
                                                 "Create_Patient_in_EPIC": [
@@ -381,8 +815,8 @@
                                         },
                                         "Success_Response_from_EPIC": {
                                             "inputs": {
-                                                "body": "@{json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Search_Patient')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',body('Filter_array')[0]['ID'],'\" , \"PatientFHIRId\" : \"',json(outputs('Search_Created_Patient')['body'])['Bundle']['entry']['resource']['Patient']['id']['@value'], '\"}}'))}",
-                                                "statusCode": "@outputs('Search_Patient')['statusCode']"
+                                                "body": "@{json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Search_Patient')['statusCode'],'\" },\"Body\":{ \"PatientExternalId\" : \"',body('Filter_array')[0]['ID'],'\" , \"PatientFHIRId\" : \"',json(outputs('Search_Created_Patient')['body'])['Bundle']['entry'][0]['resource']['Patient']['id']['@value'], '\"}}'))}",
+                                                "statusCode": 200
                                             },
                                             "kind": "Http",
                                             "runAfter": {
@@ -405,39 +839,131 @@
                                     ]
                                 },
                                 "runAfter": {
-                                    "Search_Patient": [
+                                    "Set_EPIC_Access_Token": [
                                         "Succeeded"
                                     ]
                                 },
                                 "type": "If"
                             },
+                            "Reset_EPIC_Access_Token": {
+                                "inputs": {
+                                    "name": "AccessToken",
+                                    "value": "@base64(concat('emp$',substring(body('Get_Endpoint_Details')['header'][0],9),':',substring(body('Get_Endpoint_Details')['header'][1],9)))"
+                                },
+                                "runAfter": {},
+                                "type": "SetVariable"
+                            },
                             "Search_Patient": {
                                 "inputs": {
                                     "headers": {
-                                        "Authorization": "Basic @{variables('EPICAccessToken')}",
+                                        "Authorization": "Basic @{variables('AccessToken')}",
                                         "Content-Type": "application/json",
                                         "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
                                     },
                                     "method": "GET",
-                                    "uri": "@{concat('https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Patient?','active=true&ssn=',variables('SSN'),'&family=',variables('LastName'),'&given=',variables('FirstName'),'&birthdate=',variables('DOB'))}"
+                                    "uri": "@{concat(substring(body('Get_Endpoint_Details')['address'],0,63),'FHIR/STU3/Patient?','active=true&telecom=',variables('Telecom'),'&family=',variables('LastName'),'&given=',variables('FirstName'),'&birthdate=',variables('DOB'))}"
                                 },
-                                "runAfter": {},
+                                "runAfter": {
+                                    "Reset_EPIC_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
                                 "type": "Http"
+                            },
+                            "Set_EPIC_Access_Token": {
+                                "inputs": {
+                                    "name": "AccessToken",
+                                    "value": "@base64(concat('emp$',substring(body('Get_Endpoint_Details')['header'][0],9),':',substring(body('Get_Endpoint_Details')['header'][1],9)))"
+                                },
+                                "runAfter": {
+                                    "Search_Patient": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "SetVariable"
                             }
                         },
                         "case": "EPIC"
+                    },
+                    "NextGen": {
+                        "actions": {
+                            "Get_Next_Gen_Access_Token": {
+                                "inputs": {
+                                    "body": "grant_type=password&client_id=l79800f2eab85041a4a1cdc364641df514&client_secret=b67bd784a7264dd6aa1ba1f6bfe3b8c1&email=sandbox_593%40yopmail.com&username=sandboxprod593&password=E55C9c25-23D1-45A6-959F%21",
+                                    "headers": {
+                                        "Content-Type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "https://nativeapi.nextgen.com/auth/oauth/v2/token"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Get_Patient_Details_from_Next_Gen": {
+                                "inputs": {
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('Get_Next_Gen_Access_Token')['access_token']}"
+                                    },
+                                    "method": "GET",
+                                    "uri": "https://nativeapi.nextgen.com/nga-native-api/persons/lookup?firstName=@{variables('FirstName')}&lastName=@{variables('LastName')}&dateOfBirth=@{variables('DOB')}"
+                                },
+                                "runAfter": {
+                                    "Get_Next_Gen_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Send_NG_Error_Response": {
+                                "inputs": {
+                                    "body": "@concat('{\"Header\":{ \"Endpoint\" : \"NextGen\", \"Status\" : \"Failed\", \"StatusCode\" : \"',outputs('Get_Patient_Details_from_Next_Gen')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"ReasonDescription\" : ',if(startsWith(trim(string(body('Get_Patient_Details_from_Next_Gen'))),'{'),body('Get_Patient_Details_from_Next_Gen'),json(xml(body('Get_Patient_Details_from_Next_Gen')))),'}}')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Patient_Details_from_Next_Gen": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Send_NG_Response": {
+                                "inputs": {
+                                    "body": "@concat('{\"Header\":{ \"Endpoint\" : \"NextGen\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_Patient_Details_from_Next_Gen')['statusCode'],'\" },\"Body\":{ \"ProviderExternalID\" : \"',body('Get_Patient_Details_from_Next_Gen')[0]['id'],'\"}}')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Get_Patient_Details_from_Next_Gen": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "NEXTGEN"
                     }
                 },
                 "default": {
                     "actions": {}
                 },
-                "expression": "@toupper(variables('EndPointAddress'))",
+                "expression": "@toupper(variables('EndPoint'))",
                 "runAfter": {
-                    "Set_XPath_Query": [
+                    "Set_XPath_Query_FHIR": [
                         "Succeeded"
                     ]
                 },
                 "type": "Switch"
+            },
+            "ValidateInput": {
+                "inputs": {
+                    "body": "@triggerBody()",
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/ValidateInput"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
             }
         },
         "contentVersion": "1.0.0.0",
@@ -448,25 +974,10 @@
                 "inputs": {
                     "schema": {
                         "properties": {
-                            "DOB": {
+                            "EndpointIdentifier": {
                                 "type": "string"
                             },
-                            "DepartmentID": {
-                                "type": "string"
-                            },
-                            "Endpoint": {
-                                "type": "string"
-                            },
-                            "FirstName": {
-                                "type": "string"
-                            },
-                            "LastName": {
-                                "type": "string"
-                            },
-                            "PatientIDType": {
-                                "type": "string"
-                            },
-                            "SSN": {
+                            "Identifier": {
                                 "type": "string"
                             }
                         },
