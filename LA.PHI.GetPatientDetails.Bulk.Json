@@ -2,18 +2,27 @@
     "definition": {
         "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
         "actions": {
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(json(base64ToString(triggerBody()?['ContentData']))['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Get_Endpoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
             "EPIC_AccessToken": {
                 "inputs": {
                     "variables": [
                         {
                             "name": "EPICAccessToken",
                             "type": "string",
-                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                            "value": "@base64(concat('emp$',substring(body('Get_Endpoint_Details')['header'][0],9),':',substring(body('Get_Endpoint_Details')['header'][1],9)))"
                         }
                     ]
                 },
                 "runAfter": {
-                    "Parse_JSON": [
+                    "Parse_Identifiers": [
                         "Succeeded"
                     ]
                 },
@@ -25,22 +34,34 @@
                         "audience": "https://azurehealthcareapis.com",
                         "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
                         "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
-                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
                     },
                     "function": {
                         "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
                     }
                 },
+                "runAfter": {},
+                "type": "Function"
+            },
+            "Get_Endpoint_Details": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'])"
+                },
                 "runAfter": {
-                    "EPIC_AccessToken": [
+                    "GetAccessToken": [
                         "Succeeded"
                     ]
                 },
-                "type": "Function"
+                "type": "Http"
             },
-            "Parse_JSON": {
+            "Parse_Identifiers": {
                 "inputs": {
-                    "content": "@json(base64ToString(triggerBody()?['ContentData']))",
+                    "content": "@outputs('Compose_Fields')",
                     "schema": {
                         "properties": {
                             "City": {
@@ -110,7 +131,11 @@
                         "type": "object"
                     }
                 },
-                "runAfter": {},
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
                 "type": "ParseJson"
             },
             "Switch": {
@@ -126,7 +151,7 @@
                                                 "Content-Type": "application/json"
                                             },
                                             "method": "GET",
-                                            "uri": "https://panoramic-dev.azurehealthcareapis.com/Patient?firstname=@{body('Parse_JSON')?['FirstName']}&lastname=@{body('Parse_JSON')?['LastName']}&birthDate=@{body('Parse_JSON')?['DOB']}"
+                                            "uri": "https://panoramic-dev.azurehealthcareapis.com/Patient?firstname=@{body('Parse_Identifiers')?['FirstName']}&lastname=@{body('Parse_Identifiers')?['LastName']}&birthDate=@{body('Parse_Identifiers')?['DOB']}"
                                         },
                                         "runAfter": {},
                                         "type": "Http"
@@ -237,38 +262,38 @@
                                             "inputs": {
                                                 "body": {
                                                     "Address": {
-                                                        "City": "@body('Parse_JSON')?['City']",
-                                                        "Country": "@body('Parse_JSON')?['Country']",
-                                                        "County": "@body('Parse_JSON')?['County']",
-                                                        "Email": "@body('Parse_JSON')?['Email']",
-                                                        "HouseNumber": "@body('Parse_JSON')?['HouseNumber']",
+                                                        "City": "@body('Parse_Identifiers')?['City']",
+                                                        "Country": "@body('Parse_Identifiers')?['Country']",
+                                                        "County": "@body('Parse_Identifiers')?['County']",
+                                                        "Email": "@body('Parse_Identifiers')?['Email']",
+                                                        "HouseNumber": "@body('Parse_Identifiers')?['HouseNumber']",
                                                         "Phones": [
                                                             {
-                                                                "Number": "@body('Parse_JSON')?['HousePhoneNumber']",
+                                                                "Number": "@body('Parse_Identifiers')?['HousePhoneNumber']",
                                                                 "Type": "Home"
                                                             },
                                                             {
-                                                                "Number": "@body('Parse_JSON')?['WorkPhoneNumber']",
+                                                                "Number": "@body('Parse_Identifiers')?['WorkPhoneNumber']",
                                                                 "Type": "Work"
                                                             },
                                                             {
-                                                                "Number": "@body('Parse_JSON')?['MobilePhoneNumber']",
+                                                                "Number": "@body('Parse_Identifiers')?['MobilePhoneNumber']",
                                                                 "Type": "Mobile"
                                                             }
                                                         ],
-                                                        "State": "@body('Parse_JSON')?['State']",
-                                                        "Street": "@body('Parse_JSON')?['Street']",
-                                                        "StreetLine2": "@body('Parse_JSON')?['Line2']",
-                                                        "ZipCode": "@body('Parse_JSON')?['ZipCode']"
+                                                        "State": "@body('Parse_Identifiers')?['State']",
+                                                        "Street": "@body('Parse_Identifiers')?['Street']",
+                                                        "StreetLine2": "@body('Parse_Identifiers')?['Line2']",
+                                                        "ZipCode": "@body('Parse_Identifiers')?['ZipCode']"
                                                     },
-                                                    "DateOfBirth": "@body('Parse_JSON')?['DOB']",
-                                                    "DepartmentID": "@body('Parse_JSON')?['DepartmentID']",
-                                                    "DepartmentIDType": "@body('Parse_JSON')?['DepartmentIDType']",
-                                                    "Gender": "@body('Parse_JSON')?['Gender']",
-                                                    "MaritalStatus": "@body('Parse_JSON')?['MaritalStatus']",
+                                                    "DateOfBirth": "@body('Parse_Identifiers')?['DOB']",
+                                                    "DepartmentID": "@body('Parse_Identifiers')?['DepartmentID']",
+                                                    "DepartmentIDType": "@body('Parse_Identifiers')?['DepartmentIDType']",
+                                                    "Gender": "@body('Parse_Identifiers')?['Gender']",
+                                                    "MaritalStatus": "@body('Parse_Identifiers')?['MaritalStatus']",
                                                     "Name": {
-                                                        "First": "@body('Parse_JSON')?['FirstName']",
-                                                        "LastName": "@body('Parse_JSON')?['LastName']"
+                                                        "First": "@body('Parse_Identifiers')?['FirstName']",
+                                                        "LastName": "@body('Parse_Identifiers')?['LastName']"
                                                     }
                                                 },
                                                 "headers": {
@@ -277,7 +302,7 @@
                                                     "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
                                                 },
                                                 "method": "POST",
-                                                "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/epic/2012/EMPI/External/PatientCreate/Patient/Create"
+                                                "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,63),'epic/2012/EMPI/External/PatientCreate/Patient/Create')"
                                             },
                                             "runAfter": {},
                                             "type": "Http"
@@ -289,7 +314,7 @@
                                                     "Content-Type": "application/json"
                                                 },
                                                 "method": "GET",
-                                                "uri": "https://panoramic-dev.azurehealthcareapis.com/Patient?firstname=@{body('Parse_JSON')?['FirstName']}&lastname=@{body('Parse_JSON')?['LastName']}&birthDate=@{body('Parse_JSON')?['DOB']}"
+                                                "uri": "https://panoramic-dev.azurehealthcareapis.com/Patient?firstname=@{body('Parse_Identifiers')?['FirstName']}&lastname=@{body('Parse_Identifiers')?['LastName']}&birthDate=@{body('Parse_Identifiers')?['DOB']}"
                                             },
                                             "runAfter": {
                                                 "Create_Patient_in_EPIC": [
@@ -305,22 +330,22 @@
                                                         "extension": [
                                                             {
                                                                 "url": "http://hl7.org/fhir/StructureDefinition/patient-birthTime",
-                                                                "valueDateTime": "@body('Parse_JSON')?['DOB']"
+                                                                "valueDateTime": "@body('Parse_Identifiers')?['DOB']"
                                                             }
                                                         ]
                                                     },
                                                     "active": true,
                                                     "address": [
                                                         {
-                                                            "city": "@body('Parse_JSON')?['City']",
-                                                            "line": "@body('Parse_JSON')?['Line1']",
-                                                            "postalCode": "@body('Parse_JSON')?['ZipCode']",
-                                                            "state": "@body('Parse_JSON')?['State']"
+                                                            "city": "@body('Parse_Identifiers')?['City']",
+                                                            "line": "@body('Parse_Identifiers')?['Line1']",
+                                                            "postalCode": "@body('Parse_Identifiers')?['ZipCode']",
+                                                            "state": "@body('Parse_Identifiers')?['State']"
                                                         }
                                                     ],
-                                                    "birthDate": "@body('Parse_JSON')?['DOB']",
+                                                    "birthDate": "@body('Parse_Identifiers')?['DOB']",
                                                     "deceasedBoolean": false,
-                                                    "gender": "@body('Parse_JSON')?['Gender']",
+                                                    "gender": "@body('Parse_Identifiers')?['Gender']",
                                                     "id": "@body('Retrieve_FHIR_ID_of_Patient')['entry'][0]['resource']['id']",
                                                     "identifier": [
                                                         {
@@ -345,8 +370,8 @@
                                                     },
                                                     "name": [
                                                         {
-                                                            "family": "@body('Parse_JSON')?['LastName']",
-                                                            "given": "@body('Parse_JSON')?['FirstName']",
+                                                            "family": "@body('Parse_Identifiers')?['LastName']",
+                                                            "given": "@body('Parse_Identifiers')?['FirstName']",
                                                             "use": "official"
                                                         }
                                                     ],
@@ -356,7 +381,7 @@
                                                             "rank": 1,
                                                             "system": "phone",
                                                             "use": "home",
-                                                            "value": "@body('Parse_JSON')?['HousePhoneNumber']"
+                                                            "value": "@body('Parse_Identifiers')?['HousePhoneNumber']"
                                                         }
                                                     ]
                                                 },
@@ -401,7 +426,7 @@
                                         "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
                                     },
                                     "method": "GET",
-                                    "uri": "@{concat('https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Patient?','family=',body('Parse_JSON')?['LastName'],'&given=',body('Parse_JSON')?['FistName'],'&birthdate=',body('Parse_JSON')?['DOB'])}"
+                                    "uri": "@{concat(substring(body('Get_Endpoint_Details')['address'],0,63),'FHIR/STU3/Patient?','family=',body('Parse_Identifiers')?['LastName'],'&given=',body('Parse_Identifiers')?['FirstName'],'&birthdate=',body('Parse_Identifiers')?['DOB'])}"
                                 },
                                 "runAfter": {},
                                 "type": "Http"
@@ -413,9 +438,9 @@
                 "default": {
                     "actions": {}
                 },
-                "expression": "@toupper(body('Parse_JSON')?['Endpoint'])",
+                "expression": "@toUpper(body('Get_Endpoint_Details')['identifier'][0]['value'])",
                 "runAfter": {
-                    "GetAccessToken": [
+                    "EPIC_AccessToken": [
                         "Succeeded"
                     ]
                 },
@@ -439,7 +464,7 @@
                         }
                     },
                     "method": "get",
-                    "path": "/@{encodeURIComponent(encodeURIComponent('olpatient'))}/messages/head",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('ibpatient'))}/messages/head",
                     "queries": {
                         "queueType": "Main"
                     }
