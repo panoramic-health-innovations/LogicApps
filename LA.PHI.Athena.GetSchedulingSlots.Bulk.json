@@ -47,11 +47,80 @@
                     ]
                 },
                 "runAfter": {
-                    "GetAccessToken": [
+                    "Get_Access_Token": [
                         "Succeeded"
                     ]
                 },
                 "type": "InitializeVariable"
+            },
+            "Check_if_Input_is_Valid": {
+                "actions": {},
+                "else": {
+                    "actions": {
+                        "Send_Bad_Format_Error": {
+                            "inputs": {
+                                "body": {
+                                    "ContentData": "@base64(json(concat('{\"Header\":{ \"Endpoint\" : \"',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}')))"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/@{encodeURIComponent(encodeURIComponent('ibsched'))}/messages"
+                            },
+                            "runAfter": {},
+                            "type": "ApiConnection"
+                        },
+                        "Terminate": {
+                            "inputs": {
+                                "runError": {
+                                    "code": "400",
+                                    "message": "Bad Format Error"
+                                },
+                                "runStatus": "Failed"
+                            },
+                            "runAfter": {
+                                "Send_Bad_Format_Error": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@json(string(body('LA.PHI.General.CheckEndpointAvailability')))['Header']['Status']",
+                                "Success"
+                            ]
+                        },
+                        {
+                            "equals": [
+                                "@body('ValidateInput')",
+                                "Success"
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "LA.PHI.General.CheckEndpointAvailability": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(json(base64ToString(triggerBody()?['ContentData']))['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Get_EndPoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
             },
             "Department_ID": {
                 "inputs": {
@@ -76,14 +145,14 @@
                         "audience": "https://azurehealthcareapis.com",
                         "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
                         "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
-                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
                     },
                     "function": {
                         "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
                     }
                 },
                 "runAfter": {
-                    "Get_Access_Token": [
+                    "Check_if_Input_is_Valid": [
                         "Succeeded"
                     ]
                 },
@@ -96,10 +165,26 @@
                         "content-type": "application/x-www-form-urlencoded"
                     },
                     "method": "POST",
-                    "uri": "https://api.athenahealth.com/oauthpreview/token"
+                    "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,28),'/oauthpreview/token')"
                 },
                 "runAfter": {
                     "Initialize_Counter_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_EndPoint_Details": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'])"
+                },
+                "runAfter": {
+                    "GetAccessToken": [
                         "Succeeded"
                     ]
                 },
@@ -172,6 +257,25 @@
                 },
                 "type": "InitializeVariable"
             },
+            "LA.PHI.General.CheckEndpointAvailability": {
+                "inputs": {
+                    "body": {
+                        "EndpointIdentifier": "@json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.General.CheckEndpointAvailability"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "ValidateInput": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
             "Max_Limit": {
                 "inputs": {
                     "variables": [
@@ -189,17 +293,45 @@
                 },
                 "type": "InitializeVariable"
             },
+            "Parse_Identifiers": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "ProviderID": {
+                                "type": "string"
+                            },
+                            "ScheduleID": {
+                                "type": "string"
+                            },
+                            "appointmenttypeid": {
+                                "type": "string"
+                            },
+                            "departmentid": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
             "Until": {
                 "actions": {
                     "Create_Slots_in_Athena": {
                         "inputs": {
-                            "body": "appointmentdate=@{replace(formatDateTime(substring(string(variables('StartDate')),0,10),'MM/dd/yyyy'),'/','%2F')}&appointmenttime=@{replace(substring(string(variables('StartDate')),11,5),':','%3A')}&appointmenttypeid=@{json(base64ToString(triggerBody()?['ContentData']))['appointmenttypeid']}&departmentid=@{json(base64ToString(triggerBody()?['ContentData']))['departmentid']}&ignoreschedulablepermission=true&providerid=@{json(base64ToString(triggerBody()?['ContentData']))['ProviderID']}",
+                            "body": "appointmentdate=@{replace(formatDateTime(substring(string(variables('StartDate')),0,10),'MM/dd/yyyy'),'/','%2F')}&appointmenttime=@{replace(substring(string(variables('StartDate')),11,5),':','%3A')}&appointmenttypeid=@{body('Parse_Identifiers')['appointmenttypeid']}&departmentid=@{body('Parse_Identifiers')['departmentid']}&ignoreschedulablepermission=true&providerid=@{body('Parse_Identifiers')['ProviderID']}",
                             "headers": {
                                 "Authorization": "@concat('Bearer ',body('Get_Access_Token')['access_token'])",
                                 "Content-Type": "application/x-www-form-urlencoded"
                             },
                             "method": "POST",
-                            "uri": "https://api.athenahealth.com/preview1/195900/appointments/open"
+                            "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,38),'195900/appointments/open')"
                         },
                         "runAfter": {
                             "Set_Counter_Date": [
@@ -222,7 +354,7 @@
                                     {
                                         "system": "",
                                         "type": "@json(variables('DeptID'))",
-                                        "value": "@json(base64ToString(triggerBody()?['ContentData']))['departmentid']"
+                                        "value": "@body('Parse_Identifiers')['departmentid']"
                                     },
                                     {
                                         "system": "",
@@ -232,12 +364,12 @@
                                     {
                                         "system": "",
                                         "type": "@json(variables('AppointmentTypeID'))",
-                                        "value": "@json(base64ToString(triggerBody()?['ContentData']))['appointmenttypeid']"
+                                        "value": "@body('Parse_Identifiers')['appointmenttypeid']"
                                     }
                                 ],
                                 "resourceType": "Slot",
                                 "schedule": {
-                                    "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/',json(base64ToString(triggerBody()?['ContentData']))['ScheduleID'])",
+                                    "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/',body('Parse_Identifiers')['ScheduleID'])",
                                     "type": "Schedule"
                                 },
                                 "start": "@concat(variables('StartDate'),'Z')",
@@ -314,6 +446,16 @@
                 },
                 "type": "Until"
             },
+            "ValidateInput": {
+                "inputs": {
+                    "body": "@json(base64ToString(triggerBody()?['ContentData']))",
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/ValidateInput"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
+            },
             "Visit_Type": {
                 "inputs": {
                     "variables": [
@@ -324,7 +466,11 @@
                         }
                     ]
                 },
-                "runAfter": {},
+                "runAfter": {
+                    "Parse_Identifiers": [
+                        "Succeeded"
+                    ]
+                },
                 "type": "InitializeVariable"
             }
         },
