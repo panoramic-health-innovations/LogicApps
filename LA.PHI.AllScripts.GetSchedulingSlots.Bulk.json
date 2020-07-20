@@ -1,0 +1,637 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "AppointmentTypeID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AppointmentTypeID",
+                            "type": "string",
+                            "value": "{\"text\": \"AppointmentTypeID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Department_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Appointment_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AppointmentID",
+                            "type": "string",
+                            "value": "{\"text\": \"AppointmentID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "AppointmentTypeID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Authenticate_Credentials": {
+                "inputs": {
+                    "body": {
+                        "Action": "GetUserAuthentication",
+                        "AppUserID": "@body('Get_Endpoint_Details')['header'][0]",
+                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                        "Data": "",
+                        "Parameter1": "@body('Get_Endpoint_Details')['header'][1]",
+                        "Parameter2": "",
+                        "Parameter3": "",
+                        "Parameter4": "",
+                        "Parameter5": "",
+                        "Parameter6": "",
+                        "Token": "@decodeBase64(body('Get_AllScripts_Access_Token')['$content'])"
+                    },
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "method": "POST",
+                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'MagicJson')"
+                },
+                "runAfter": {
+                    "Get_AllScripts_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(json(base64ToString(triggerBody()?['ContentData']))['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Initialize_Counter": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
+            "Condition": {
+                "actions": {},
+                "else": {
+                    "actions": {
+                        "Send_message": {
+                            "inputs": {
+                                "body": {
+                                    "ContentData": "@base64(json(concat('{\"Header\":{ \"Endpoint\" : \"',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}')))"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/@{encodeURIComponent(encodeURIComponent('ibsched'))}/messages"
+                            },
+                            "runAfter": {},
+                            "type": "ApiConnection"
+                        },
+                        "Terminate": {
+                            "inputs": {
+                                "runError": {
+                                    "code": "400",
+                                    "message": "Bad Format Error"
+                                },
+                                "runStatus": "Failed"
+                            },
+                            "runAfter": {
+                                "Send_message": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@json(string(body('LA.PHI.General.CheckEndpointAvailability')))['Header']['Status']",
+                                "Success"
+                            ]
+                        },
+                        {
+                            "equals": [
+                                "@body('ValidateInput')",
+                                "Success"
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "LA.PHI.General.CheckEndpointAvailability": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Department_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "DeptID",
+                            "type": "string",
+                            "value": "{\"text\": \"DepartmentID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Visit_Type": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "For_each": {
+                "actions": {
+                    "Set_ICounter": {
+                        "inputs": {
+                            "name": "iCounter",
+                            "value": 0
+                        },
+                        "runAfter": {},
+                        "type": "SetVariable"
+                    },
+                    "Until": {
+                        "actions": {
+                            "Check_Slot_Value": {
+                                "actions": {
+                                    "Create_Slot_in_FHIR": {
+                                        "inputs": {
+                                            "body": {
+                                                "comment": "Assessments should be performed before requesting appointments in this slot.",
+                                                "end": "@addMinutes(concat(formatDateTime(items('For_each')['Available_Date'], 'yyyy-MM-dd'),'T',body('GetAllScriptSlotDatesforAM'),'.0000000Z'),15)",
+                                                "identifier": [
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('VisitType'))",
+                                                        "value": "Physical"
+                                                    },
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('DeptID'))",
+                                                        "value": "@items('For_each')['Scheduling_Department_ID']"
+                                                    },
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('AppointmentID'))",
+                                                        "value": "@items('For_each')['Available_Time_Block_ID']"
+                                                    },
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('AppointmentTypeID'))",
+                                                        "value": "@items('For_each')['Elig_Appointment_Category_ID']"
+                                                    }
+                                                ],
+                                                "resourceType": "Slot",
+                                                "schedule": {
+                                                    "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/')",
+                                                    "type": "Schedule"
+                                                },
+                                                "start": "@concat(formatDateTime(items('For_each')['Available_Date'], 'yyyy-MM-dd'),'T',body('GetAllScriptSlotDatesforAM'),'.0000000Z')",
+                                                "status": "free"
+                                            },
+                                            "headers": {
+                                                "Authorization": "Bearer @{body('GetAccessToken')}",
+                                                "Content-Type": "application/json"
+                                            },
+                                            "method": "POST",
+                                            "uri": "https://panoramic-dev.azurehealthcareapis.com/Slot/"
+                                        },
+                                        "runAfter": {
+                                            "GetAllScriptSlotDatesforAM": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Http"
+                                    },
+                                    "GetAllScriptSlotDatesforAM": {
+                                        "inputs": {
+                                            "body": {
+                                                "AMPM": "AM",
+                                                "iCounter": "@{variables('OpenSlot')}"
+                                            },
+                                            "function": {
+                                                "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAllScriptSlotDates"
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "type": "Function"
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "equals": [
+                                                "@variables('OpenSlot')",
+                                                1
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Set_variable": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Check_Slot_Value_PM": {
+                                "actions": {
+                                    "Create_Slot_in_FHIR_for_PM_Slot": {
+                                        "inputs": {
+                                            "body": {
+                                                "comment": "Assessments should be performed before requesting appointments in this slot.",
+                                                "end": "@addMinutes(concat(formatDateTime(items('For_each')['Available_Date'], 'yyyy-MM-dd'),'T',body('GetAllScriptSlotDatesPM'),'.0000000Z'),15)",
+                                                "identifier": [
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('VisitType'))",
+                                                        "value": "Physical"
+                                                    },
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('DeptID'))",
+                                                        "value": "@items('For_each')['Scheduling_Department_ID']"
+                                                    },
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('AppointmentID'))",
+                                                        "value": "@items('For_each')['Available_Time_Block_ID']"
+                                                    },
+                                                    {
+                                                        "system": "",
+                                                        "type": "@json(variables('AppointmentTypeID'))",
+                                                        "value": "@items('For_each')['Elig_Appointment_Category_ID']"
+                                                    }
+                                                ],
+                                                "resourceType": "Slot",
+                                                "schedule": {
+                                                    "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/')",
+                                                    "type": "Schedule"
+                                                },
+                                                "start": "@concat(formatDateTime(items('For_each')['Available_Date'], 'yyyy-MM-dd'),'T',body('GetAllScriptSlotDatesPM'),'.0000000Z')",
+                                                "status": "free"
+                                            },
+                                            "headers": {
+                                                "Authorization": "Bearer @{body('GetAccessToken')}",
+                                                "Content-Type": "application/json"
+                                            },
+                                            "method": "POST",
+                                            "uri": "https://panoramic-dev.azurehealthcareapis.com/Slot/"
+                                        },
+                                        "runAfter": {
+                                            "GetAllScriptSlotDatesPM": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Http"
+                                    },
+                                    "GetAllScriptSlotDatesPM": {
+                                        "inputs": {
+                                            "body": {
+                                                "AMPM": "PM",
+                                                "iCounter": "@{variables('OpenSlot')}"
+                                            },
+                                            "function": {
+                                                "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAllScriptSlotDates"
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "type": "Function"
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "equals": [
+                                                "@variables('OpenSlot')",
+                                                1
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Set_Blocked_2": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Increment_variable": {
+                                "inputs": {
+                                    "name": "iCounter",
+                                    "value": 3
+                                },
+                                "runAfter": {
+                                    "Check_Slot_Value_PM": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "IncrementVariable"
+                            },
+                            "Set_Blocked_2": {
+                                "inputs": {
+                                    "name": "OpenSlot",
+                                    "value": "@substring(items('For_each')['Blocked_Slots2'],variables('iCounter'),1)"
+                                },
+                                "runAfter": {
+                                    "Check_Slot_Value": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "SetVariable"
+                            },
+                            "Set_variable": {
+                                "inputs": {
+                                    "name": "OpenSlot",
+                                    "value": "@substring(items('For_each')['Blocked_Slots1'],variables('iCounter'),1)"
+                                },
+                                "runAfter": {},
+                                "type": "SetVariable"
+                            }
+                        },
+                        "expression": "@lessOrEquals(variables('iCounter'), 144)",
+                        "limit": {
+                            "count": 60,
+                            "timeout": "PT1H"
+                        },
+                        "runAfter": {
+                            "Set_ICounter": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Until"
+                    }
+                },
+                "foreach": "@json(string(body('Get_Slots_from_AllScripts')))[0]['getavailablescheduleinfo']",
+                "runAfter": {
+                    "Get_Slots_from_AllScripts": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "Condition": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "Get_AllScripts_Access_Token": {
+                "inputs": {
+                    "body": {
+                        "Password": "P@n8r@M1cH6@Lta#nn5v@Tf!Ns2Ncp",
+                        "Username": "Panor-6855-PHITest-test"
+                    },
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "method": "POST",
+                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'GetToken')"
+                },
+                "runAfter": {
+                    "Initialize_Appointment_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_EndPoint_Details": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'])"
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_Slots_from_AllScripts": {
+                "inputs": {
+                    "body": {
+                        "Action": "GetAvailableSchedule",
+                        "AppUserID": "@body('Get_Endpoint_Details')['header'][0]",
+                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                        "Data": "",
+                        "Parameter1": "@body('Get_Endpoint_Details')['header'][1]",
+                        "Parameter2": "06/29/2020",
+                        "Parameter3": "07/29/2020",
+                        "Parameter4": "",
+                        "Parameter5": "",
+                        "Parameter6": "",
+                        "Token": "@decodeBase64(body('Get_AllScripts_Access_Token')['$content'])"
+                    },
+                    "headers": {
+                        "Contnet-Type": "application/json"
+                    },
+                    "method": "POST",
+                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'MagicJson')"
+                },
+                "runAfter": {
+                    "Authenticate_Credentials": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_Appointment_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AthenaAppointmentID",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Appointment_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Counter": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "iCounter",
+                            "type": "integer",
+                            "value": 1
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Slot": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Slot": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "OpenSlot",
+                            "type": "string",
+                            "value": "Dummy"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_EndPoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "LA.PHI.General.CheckEndpointAvailability": {
+                "inputs": {
+                    "body": {
+                        "EndpointIdentifier": "@json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.General.CheckEndpointAvailability"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "ValidateInput": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "Parse_Identifiers": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "EndDate": {
+                                "type": "string"
+                            },
+                            "ProviderID": {
+                                "type": "string"
+                            },
+                            "ScheduleID": {
+                                "type": "string"
+                            },
+                            "StartDate": {
+                                "type": "string"
+                            },
+                            "appointmenttypeid": {
+                                "type": "string"
+                            },
+                            "departmentid": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "ValidateInput": {
+                "inputs": {
+                    "body": "@json(base64ToString(triggerBody()?['ContentData']))",
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/ValidateInput"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
+            },
+            "Visit_Type": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "VisitType",
+                            "type": "string",
+                            "value": "{\"text\": \"VisitType\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_Identifiers": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_topic_subscription_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('obsched'))}/subscriptions/@{encodeURIComponent('AllScripts')}/messages/head",
+                    "queries": {
+                        "subscriptionType": "Main"
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 1
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}

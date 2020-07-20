@@ -1,0 +1,453 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "AppointmentTypeID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AppointmentTypeID",
+                            "type": "string",
+                            "value": "{\"text\": \"AppointmentTypeID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Department_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Appointment_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AppointmentID",
+                            "type": "string",
+                            "value": "{\"text\": \"AppointmentID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "AppointmentTypeID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Check_if_Input_is_Valid": {
+                "actions": {},
+                "else": {
+                    "actions": {
+                        "Send_message": {
+                            "inputs": {
+                                "body": {
+                                    "ContentData": "@base64(json(concat('{\"Header\":{ \"Endpoint\" : \"',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}')))"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/@{encodeURIComponent(encodeURIComponent('ibsched'))}/messages",
+                                "queries": {
+                                    "systemProperties": "None"
+                                }
+                            },
+                            "runAfter": {},
+                            "type": "ApiConnection"
+                        },
+                        "Terminate": {
+                            "inputs": {
+                                "runError": {
+                                    "code": "400",
+                                    "message": "Bad Format Error"
+                                },
+                                "runStatus": "Failed"
+                            },
+                            "runAfter": {
+                                "Send_message": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@json(string(body('LA.PHI.General.CheckEndpointAvailability')))['Header']['Status']",
+                                "Success"
+                            ]
+                        },
+                        {
+                            "equals": [
+                                "@body('ValidateInput')",
+                                "Success"
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "LA.PHI.General.CheckEndpointAvailability": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(json(base64ToString(triggerBody()?['ContentData']))['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Get_Endpoint_Identifier": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
+            "Department_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "DeptID",
+                            "type": "string",
+                            "value": "{\"text\": \"DepartmentID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Visit_Type": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "For_each": {
+                "actions": {
+                    "Create_Slot_in_FHIR": {
+                        "inputs": {
+                            "body": {
+                                "comment": "Assessments should be performed before requesting appointments in this slot.",
+                                "end": "@items('For_each')['resource']['end']",
+                                "identifier": [
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('VisitType'))",
+                                        "value": "Physical"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('DeptID'))",
+                                        "value": ""
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('AppointmentID'))",
+                                        "value": "@items('For_each')['resource']['id']"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('AppointmentTypeID'))",
+                                        "value": ""
+                                    }
+                                ],
+                                "resourceType": "Slot",
+                                "schedule": {
+                                    "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/')",
+                                    "type": "Schedule"
+                                },
+                                "start": "@items('For_each')['resource']['start']",
+                                "status": "free"
+                            },
+                            "headers": {
+                                "Authorization": "Bearer @{body('GetAccessToken')}",
+                                "Content-Type": "application/json"
+                            },
+                            "method": "POST",
+                            "uri": "https://panoramic-dev.azurehealthcareapis.com/Slot/"
+                        },
+                        "runAfter": {},
+                        "type": "Http"
+                    }
+                },
+                "foreach": "@json(string(decodeBase64(body('Get_Slot_Details_from_CERNER')['$content'])))['entry']",
+                "runAfter": {
+                    "Get_Slot_Details_from_CERNER": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "Check_if_Input_is_Valid": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "Get_Access_Token": {
+                "inputs": {
+                    "body": "grant_type=client_credentials&scope=patient%2FSchedule.read%20system%2FPatient.read%20system%2FObservation.read",
+                    "headers": {
+                        "Accept": "application/json",
+                        "Authorization": "@concat('Basic ', body('Get_Endpoint_Identifier')['header'][1])",
+                        "content-type": "application/x-www-form-urlencoded"
+                    },
+                    "method": "POST",
+                    "uri": "@concat('https://authorization.sandboxcerner.com/tenants/',body('Get_Endpoint_Identifier')['header'][0],'/protocols/oauth2/profiles/smart-v1/token')"
+                },
+                "runAfter": {
+                    "Initialize_Counter_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_Endpoint_Identifier": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'])"
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_Slot_Details_from_CERNER": {
+                "inputs": {
+                    "headers": {
+                        "Accept": "application/json+fhir",
+                        "Authorization": "Bearer @{body('Get_Access_Token')['access_token']}"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://fhir-open.sandboxcerner.com/dstu2/0b8a0111-e8e6-4c26-a91c-5069cbc6b1ca/Slot?start=2018&slot-type=http://snomed.info/sct|394581000&_include=Slot:schedule')"
+                },
+                "runAfter": {
+                    "Get_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_Appointment_ID": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AthenaAppointmentID",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Appointment_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Counter_Date": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Counter Date",
+                            "type": "string",
+                            "value": "@addMinutes(variables('StartDate'),15)"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Initial_Value": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Initial_Value": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "InitialValue",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Start_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Start_Date": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "StartDate",
+                            "type": "string",
+                            "value": "@concat(addDays(utcNow('yyyy-MM-dd'),1,'yyyy-MM-dd'),'T00:00:00')"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Max_Limit": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "LA.PHI.General.CheckEndpointAvailability": {
+                "inputs": {
+                    "body": {
+                        "EndpointIdentifier": "@json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.General.CheckEndpointAvailability"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "ValidateInput": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "Max_Limit": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "MaxLimit",
+                            "type": "integer",
+                            "value": 10
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Appointment_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Parse_Identifiers": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "ProviderID": {
+                                "type": "string"
+                            },
+                            "ScheduleID": {
+                                "type": "string"
+                            },
+                            "appointmenttypeid": {
+                                "type": "string"
+                            },
+                            "departmentid": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "ValidateInput": {
+                "inputs": {
+                    "body": "@json(base64ToString(triggerBody()?['ContentData']))",
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/ValidateInput"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
+            },
+            "Visit_Type": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "VisitType",
+                            "type": "string",
+                            "value": "{\"text\": \"VisitType\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_Identifiers": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_topic_subscription_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('obsched'))}/subscriptions/@{encodeURIComponent('CERNER')}/messages/head",
+                    "queries": {
+                        "subscriptionType": "Main"
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 1
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}

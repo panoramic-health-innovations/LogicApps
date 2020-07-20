@@ -1,0 +1,580 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "AllBookedSlotDates": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "BookedSlotDates",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Slot_Status": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Check_if_Input_is_Valid": {
+                "actions": {},
+                "else": {
+                    "actions": {
+                        "Send_message": {
+                            "inputs": {
+                                "body": {
+                                    "ContentData": "@base64(json(concat('{\"Header\":{ \"Endpoint\" : \"',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}')))"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['servicebus']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/@{encodeURIComponent(encodeURIComponent('ibsched'))}/messages",
+                                "queries": {
+                                    "systemProperties": "None"
+                                }
+                            },
+                            "runAfter": {},
+                            "type": "ApiConnection"
+                        },
+                        "Terminate": {
+                            "inputs": {
+                                "runError": {
+                                    "code": "400",
+                                    "message": "Bad Format Error"
+                                },
+                                "runStatus": "Failed"
+                            },
+                            "runAfter": {
+                                "Send_message": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@json(string(body('LA.PHI.General.CheckEndpointAvailability')))['Header']['Status']",
+                                "Success"
+                            ]
+                        },
+                        {
+                            "equals": [
+                                "@body('LA.PHI.General.CheckEndpointAvailability')",
+                                "Success"
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "LA.PHI.General.CheckEndpointAvailability": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(json(base64ToString(triggerBody()?['ContentData']))['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "DrChrono_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
+            "DrChrono_Access_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "DRCHRONOAccessToken",
+                            "type": "string",
+                            "value": "5WO6RnyHS12FGoTgSFFt6EGNiDoBfM"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_Endpoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "For_each_Booked_Slot_Response": {
+                "actions": {
+                    "Append_to_string_variable": {
+                        "inputs": {
+                            "name": "BookedSlotDates",
+                            "value": "@concat(items('For_each_Booked_Slot_Response')['scheduled_time'],'|')"
+                        },
+                        "runAfter": {},
+                        "type": "AppendToStringVariable"
+                    }
+                },
+                "foreach": "@body('Get_Booked_Slots_From_DrChrono')['results']",
+                "runAfter": {
+                    "Get_Booked_Slots_From_DrChrono": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "Check_if_Input_is_Valid": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "Get_Booked_Slots_From_DrChrono": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('LA.PHI.DRCHRONO.RefreshAccessToken')['AccessToken']}",
+                        "Content-Type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'appointments?date_range=',body('Parse_Identifiers')?['StartDate'],'/',addDays(body('Parse_Identifiers')?['StartDate'],1,'yyyy-MM-dd'),'&doctor=',body('Parse_Identifiers')?['doctor'],'&office=',body('Parse_Identifiers')?['office'])"
+                },
+                "runAfter": {
+                    "LA.PHI.DRCHRONO.RefreshAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_Endpoint_Details": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'])"
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_Department": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "DeptID",
+                            "type": "string",
+                            "value": "{\"text\": \"DepartmentID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Visit_Type": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Doctor": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "DoctorID",
+                            "type": "string",
+                            "value": "{\"text\": \"DoctorID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Patient": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_End_Date": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "EndDate",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Max_Limit": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Initial_Value": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "InitialValue",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_End_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Max_Limit": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "MaxLimit",
+                            "type": "integer",
+                            "value": 48
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Start_Date": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Patient": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "PatientID",
+                            "type": "string",
+                            "value": "{\"text\": \"PatientID\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Department": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Slot_Status": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "SlotStatus",
+                            "type": "string",
+                            "value": "SlotStatus"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Set_DrChrono_Refresh_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Start_Date": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "StartDate",
+                            "type": "string",
+                            "value": "@concat(body('Parse_Identifiers')['StartDate'],'T00:00:00')"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Doctor": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "LA.PHI.DRCHRONO.RefreshAccessToken": {
+                "inputs": {
+                    "body": {
+                        "RefreshToken": "@body('Get_Endpoint_Details')['header'][1]"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.DRCHRONO.RefreshAccessToken"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "AllBookedSlotDates": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "LA.PHI.General.CheckEndpointAvailability": {
+                "inputs": {
+                    "body": {
+                        "EndpointIdentifier": "@json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.General.CheckEndpointAvailability"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "ValidateInput": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "Parse_Identifiers": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "Duration": {
+                                "type": "string"
+                            },
+                            "StartDate": {
+                                "type": "string"
+                            },
+                            "doctor": {
+                                "type": "string"
+                            },
+                            "office": {
+                                "type": "string"
+                            },
+                            "patient": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Set_DrChrono_Refresh_Token": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "DrChronoRefreshToken",
+                            "type": "string",
+                            "value": "Oob8DOn8JXax2d5aMp2dmXxer36gRO"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Initial_Value": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Until": {
+                "actions": {
+                    "Create_Slot_in_FHIR": {
+                        "inputs": {
+                            "body": {
+                                "comment": "Assessments should be performed before requesting appointments in this slot.",
+                                "end": "@addToTime(concat(variables('StartDate'),'Z'),int(body('Parse_Identifiers')['Duration']),'Minute')",
+                                "id": "@replace(replace(replace(variables('StartDate'),'-',''),'/',''),':','')",
+                                "identifier": [
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('VisitType'))",
+                                        "value": "Physical"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('DeptID'))",
+                                        "value": "@body('Parse_Identifiers')['office']"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('DoctorID'))",
+                                        "value": "@body('Parse_Identifiers')['doctor']"
+                                    },
+                                    {
+                                        "system": "",
+                                        "type": "@json(variables('PatientID'))",
+                                        "value": "@body('Parse_Identifiers')['patient']"
+                                    }
+                                ],
+                                "resourceType": "Slot",
+                                "schedule": {
+                                    "reference": "@concat('https://panoramic-dev.azurehealthcareapis.com/Schedule/',replace(replace(variables('StartDate'),'-',''),'/',''))",
+                                    "type": "Schedule"
+                                },
+                                "start": "@concat(variables('StartDate'),'Z')",
+                                "status": "@{variables('SlotStatus')}"
+                            },
+                            "headers": {
+                                "Authorization": "Bearer @{body('GetAccessToken')}",
+                                "Content-Type": "application/json"
+                            },
+                            "method": "PUT",
+                            "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Slot/',replace(replace(replace(variables('StartDate'),'-',''),'/',''),':',''))"
+                        },
+                        "runAfter": {
+                            "Set_Slot_Status": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Http"
+                    },
+                    "Increment_variable": {
+                        "inputs": {
+                            "name": "InitialValue",
+                            "value": 1
+                        },
+                        "runAfter": {
+                            "Set_StartDate": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "IncrementVariable"
+                    },
+                    "Set_Counter_Date": {
+                        "inputs": {
+                            "name": "EndDate",
+                            "value": "@addMinutes(variables('StartDate'),int(body('Parse_Identifiers')['Duration']))"
+                        },
+                        "runAfter": {},
+                        "type": "SetVariable"
+                    },
+                    "Set_Slot_Status": {
+                        "inputs": {
+                            "name": "SlotStatus",
+                            "value": "@if(equals(indexOf(variables('BookedSlotDates'),concat(variables('StartDate'),'|')),'-1'),'free','busy')"
+                        },
+                        "runAfter": {
+                            "Set_Counter_Date": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "SetVariable"
+                    },
+                    "Set_StartDate": {
+                        "inputs": {
+                            "name": "StartDate",
+                            "value": "@variables('EndDate')"
+                        },
+                        "runAfter": {
+                            "Create_Slot_in_FHIR": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "SetVariable"
+                    }
+                },
+                "expression": "@equals(variables('InitialValue'), variables('MaxLimit'))",
+                "limit": {
+                    "count": 60,
+                    "timeout": "PT1H"
+                },
+                "runAfter": {
+                    "For_each_Booked_Slot_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Until"
+            },
+            "ValidateInput": {
+                "inputs": {
+                    "body": "@json(base64ToString(triggerBody()?['ContentData']))",
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/ValidateInput"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
+            },
+            "Visit_Type": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "VisitType",
+                            "type": "string",
+                            "value": "{\"text\": \"VisitType\"}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_Identifiers": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_message_is_received_in_a_topic_subscription_(auto-complete)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('obsched'))}/subscriptions/@{encodeURIComponent('DrChrono')}/messages/head",
+                    "queries": {
+                        "subscriptionType": "Main"
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 3
+                },
+                "type": "ApiConnection"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "servicebus": {
+                    "connectionId": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Web/connections/servicebus",
+                    "connectionName": "servicebus",
+                    "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+                }
+            }
+        }
+    }
+}
