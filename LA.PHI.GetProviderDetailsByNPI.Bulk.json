@@ -2,13 +2,22 @@
     "definition": {
         "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
         "actions": {
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(json(base64ToString(triggerBody()?['ContentData']))['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Get_Endpoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
             "EPIC_Access_Token": {
                 "inputs": {
                     "variables": [
                         {
                             "name": "EPICAccessToken",
                             "type": "string",
-                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                            "value": "@base64(concat('emp$',substring(body('Get_Endpoint_Details')['header'][0],9),':',substring(body('Get_Endpoint_Details')['header'][1],9)))"
                         }
                     ]
                 },
@@ -19,13 +28,63 @@
                 },
                 "type": "InitializeVariable"
             },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
+            },
+            "Get_Endpoint_Details": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',json(base64ToString(triggerBody()?['ContentData']))['EndpointIdentifier'])"
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Parse_Identifiers": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "NPI": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Compose_Fields": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
             "Read_Endpoint": {
                 "inputs": {
                     "variables": [
                         {
                             "name": "EndPointAddress",
                             "type": "string",
-                            "value": "@toupper(json(base64ToString(triggerBody()?['ContentData']))['Endpoint'])"
+                            "value": "@toUpper(body('Get_Endpoint_Details')['identifier'][0]['value'])"
                         }
                     ]
                 },
@@ -42,11 +101,15 @@
                         {
                             "name": "NPI",
                             "type": "string",
-                            "value": "@json(base64ToString(triggerBody()?['ContentData']))['NPI']"
+                            "value": "@body('Parse_Identifiers')?['NPI']"
                         }
                     ]
                 },
-                "runAfter": {},
+                "runAfter": {
+                    "Parse_Identifiers": [
+                        "Succeeded"
+                    ]
+                },
                 "type": "InitializeVariable"
             },
             "Set_EPIC_External_ID": {
@@ -103,25 +166,6 @@
                                 },
                                 "type": "Http"
                             },
-                            "GetAccessToken": {
-                                "inputs": {
-                                    "body": {
-                                        "audience": "https://azurehealthcareapis.com",
-                                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
-                                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
-                                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
-                                    },
-                                    "function": {
-                                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
-                                    }
-                                },
-                                "runAfter": {
-                                    "Get_Practitioner_Details": [
-                                        "Succeeded"
-                                    ]
-                                },
-                                "type": "Function"
-                            },
                             "Get_Practitioner_Details": {
                                 "inputs": {
                                     "headers": {
@@ -130,7 +174,7 @@
                                         "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
                                     },
                                     "method": "GET",
-                                    "uri": "@concat('https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/STU3/Practitioner?identifier=NPI|',variables('NPI'))"
+                                    "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,63),'FHIR/STU3/Practitioner?identifier=NPI|',variables('NPI'))"
                                 },
                                 "runAfter": {},
                                 "type": "Http"
@@ -187,7 +231,7 @@
                                     "value": "@xpath(outputs('Get_Practitioner_Details')['body'],'string(//*[local-name()=\"Bundle\"]/*[local-name()=\"entry\"]/*[local-name()=\"resource\"]/*[local-name()=\"Practitioner\"]/*[local-name()=\"identifier\"][*[local-name()=\"type\"]/*[local-name()=\"text\"]/@*[local-name()=\"value\"]=\"EXTERNAL\"]/*[local-name()=\"value\"]/@*[local-name()=\"value\"])')"
                                 },
                                 "runAfter": {
-                                    "GetAccessToken": [
+                                    "Get_Practitioner_Details": [
                                         "Succeeded"
                                     ]
                                 },
@@ -196,7 +240,7 @@
                             "Write_Response_to_Inbound_Queue": {
                                 "inputs": {
                                     "body": {
-                                        "ContentData": "@{base64(concat('{','\n','\"FHIR-PractionerID\": \"',body('Post_To_FHIR')['id'],'\",','\n','\"FHIR-PractionerRole - ID\": \"',body('Create_Provider_Role_in_FHIR')['id'],'\",','\n','\"Endpoint\": \"EPIC\",','\n','\"NPI\": \"',variables('NPI'),'\",','\n','\"ExternalProviderID\" : ',variables('ExternalProviderID'),'\n','}'))}",
+                                        "ContentData": "@{base64(concat('{','\n','\"FHIR-PractionerID\": \"',body('Post_To_FHIR')['id'],'\",','\n','\"FHIR-PractionerRole - ID\": \"',body('Create_Provider_Role_in_FHIR')['id'],'\",','\n','\"Endpoint\": \"',variables('EndPointAddress'),'\",','\n','\"NPI\": \"',variables('NPI'),'\",','\n','\"ExternalProviderID\" : ',variables('ExternalProviderID'),'\n','}'))}",
                                         "Properties": {
                                             "c": "d"
                                         }
@@ -207,7 +251,7 @@
                                         }
                                     },
                                     "method": "post",
-                                    "path": "/@{encodeURIComponent(encodeURIComponent('ibprovid'))}/messages",
+                                    "path": "/@{encodeURIComponent(encodeURIComponent('olprovid'))}/messages",
                                     "queries": {
                                         "systemProperties": "None"
                                     }
@@ -252,7 +296,7 @@
                         }
                     },
                     "method": "get",
-                    "path": "/@{encodeURIComponent(encodeURIComponent('olprovid'))}/messages/head",
+                    "path": "/@{encodeURIComponent(encodeURIComponent('ibprovid'))}/messages/head",
                     "queries": {
                         "queueType": "Main"
                     }
