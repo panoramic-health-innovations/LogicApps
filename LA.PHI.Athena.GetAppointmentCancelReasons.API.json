@@ -2,49 +2,180 @@
     "definition": {
         "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
         "actions": {
-            "Get_Access_Token": {
-                "inputs": {
-                    "body": "grant_type=client_credentials&client_id=wffujq3bf5hqxbkvcqb2qta3&client_secret=f4GgJBxFF9Rcp4B",
-                    "headers": {
-                        "content-type": "application/x-www-form-urlencoded"
-                    },
-                    "method": "POST",
-                    "uri": "https://api.athenahealth.com/oauthpreview/token"
+            "Check_Validity_of_Input": {
+                "actions": {},
+                "else": {
+                    "actions": {
+                        "Send_Bad_Format_Response": {
+                            "inputs": {
+                                "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"',triggerBody()?['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}'))",
+                                "statusCode": 200
+                            },
+                            "kind": "Http",
+                            "runAfter": {},
+                            "type": "Response"
+                        },
+                        "Terminate": {
+                            "inputs": {
+                                "runError": {
+                                    "code": "400",
+                                    "message": "Bad Format"
+                                },
+                                "runStatus": "Failed"
+                            },
+                            "runAfter": {
+                                "Send_Bad_Format_Response": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate"
+                        }
+                    }
                 },
-                "runAfter": {},
-                "type": "Http"
-            },
-            "Get_Appointment_Cancel_Reasons": {
-                "inputs": {
-                    "headers": {
-                        "Authorization": "Bearer @{body('Parse_Access_Token')?['access_token']}",
-                        "content-type": "application/x-www-form-urlencoded"
-                    },
-                    "method": "GET",
-                    "uri": "https://api.athenahealth.com/preview1/195900/appointmentcancelreasons"
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@json(string(body('LA.PHI.General.CheckEndpointAvailability')))['Header']['Status']",
+                                "Success"
+                            ]
+                        },
+                        {
+                            "equals": [
+                                "@body('ValidateInput')",
+                                "Success"
+                            ]
+                        }
+                    ]
                 },
                 "runAfter": {
-                    "Parse_Access_Token": [
+                    "LA.PHI.General.CheckEndpointAvailability": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If"
+            },
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(triggerBody()?['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
+                "runAfter": {
+                    "Initialize_Access_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "Sx1LRBabgD?GG?[5bv_RcGTboUNcRs74"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "Check_Validity_of_Input": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "Get_Endpoint_Details": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{body('GetAccessToken')}",
+                        "content-type": "application/json"
+                    },
+                    "method": "GET",
+                    "uri": "@concat('https://panoramic-dev.azurehealthcareapis.com/Endpoint/',triggerBody()?['EndpointIdentifier'])"
+                },
+                "runAfter": {
+                    "GetAccessToken": [
                         "Succeeded"
                     ]
                 },
                 "type": "Http"
             },
-            "Parse_Access_Token": {
+            "Initialize_Access_Token": {
                 "inputs": {
-                    "content": "@body('Get_Access_Token')",
+                    "variables": [
+                        {
+                            "name": "AccessToken",
+                            "type": "string",
+                            "value": "dummy"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Endpoint": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Endpoint": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Endpoint",
+                            "type": "string",
+                            "value": "@toUpper(body('Get_Endpoint_Details')['identifier'][0]['value'])"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_Endpoint_Details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "LA.PHI.General.CheckEndpointAvailability": {
+                "inputs": {
+                    "body": {
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.General.CheckEndpointAvailability"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "ValidateInput": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "Parse_JSON": {
+                "inputs": {
+                    "content": "@outputs('Compose_Fields')",
                     "schema": {
                         "properties": {
-                            "access_token": {
+                            "AppointmentID": {
                                 "type": "string"
                             },
-                            "expires_in": {
-                                "type": "integer"
-                            },
-                            "refresh_token": {
+                            "CancellationReason": {
                                 "type": "string"
                             },
-                            "token_type": {
+                            "CancellationReasonID": {
+                                "type": "string"
+                            },
+                            "ContactID": {
+                                "type": "string"
+                            },
+                            "ContactIDType": {
+                                "type": "string"
+                            },
+                            "PatientID": {
+                                "type": "string"
+                            },
+                            "PatientIDType": {
                                 "type": "string"
                             }
                         },
@@ -52,24 +183,411 @@
                     }
                 },
                 "runAfter": {
-                    "Get_Access_Token": [
+                    "Compose_Fields": [
                         "Succeeded"
                     ]
                 },
                 "type": "ParseJson"
             },
-            "Response": {
+            "Return_Parsing_Error": {
                 "inputs": {
-                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Get_Appointment_Cancel_Reasons')['statusCode'],'\" },\"Body\":',body('Get_Appointment_Cancel_Reasons') ,'}}'))",
-                    "statusCode": "@outputs('Get_Appointment_Cancel_Reasons')['statusCode']"
+                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"',triggerBody()?['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}'))",
+                    "statusCode": 200
                 },
                 "kind": "Http",
                 "runAfter": {
-                    "Get_Appointment_Cancel_Reasons": [
-                        "Succeeded"
+                    "Parse_JSON": [
+                        "Failed"
                     ]
                 },
                 "type": "Response"
+            },
+            "Switch": {
+                "cases": {
+                    "ATHENA": {
+                        "actions": {
+                            "Booking_Deletion_Error_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Delete_Appointment_in_Athena')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\",\"AppointmentID\": \"',body('Parse_JSON')?['AppointmentID'],'\",\"ReasonDescription\" :\"',concat(json(body('Delete_Appointment_in_Athena'))['detailedmessage'],' ',json(body('Delete_Appointment_in_Athena'))['error']),'\"}}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Delete_Appointment_in_Athena": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Booking_Deletion_Success_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"ATHENA\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Delete_Appointment_in_Athena')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Cancellation Confirmed\",\"ReasonDescription\": ',body('Delete_Appointment_in_Athena'),'}}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Delete_Appointment_in_Athena": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Delete_Appointment_in_Athena": {
+                                "inputs": {
+                                    "body": "@concat(if(empty(body('Parse_JSON')?['CancellationReasonID']),'','appointmentcancelreasonid='),if(empty(body('Parse_JSON')?['CancellationReasonID']),'',body('Parse_JSON')?['CancellationReasonID']),'&',if(empty(body('Parse_JSON')?['CancellationReason']),'','cancellationreason='),if(empty(body('Parse_JSON')?['CancellationReason']),'',body('Parse_JSON')?['CancellationReason']),'&ignoreschedulablepermission=true&patientid=',body('Parse_JSON')?['PatientID'])",
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('Parse_Access_Token')?['access_token']}",
+                                        "content-type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "PUT",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'195900/appointments/',body('Parse_JSON')?['AppointmentID'],'/cancel')"
+                                },
+                                "runAfter": {
+                                    "Parse_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Get_Athena_Access_Token": {
+                                "inputs": {
+                                    "body": "grant_type=client_credentials&client_id=wffujq3bf5hqxbkvcqb2qta3&client_secret=f4GgJBxFF9Rcp4B",
+                                    "headers": {
+                                        "content-type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(substring(body('Get_Endpoint_Details')['address'],0,28),'/oauthpreview/token')"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Parse_Access_Token": {
+                                "inputs": {
+                                    "content": "@body('Get_Athena_Access_Token')",
+                                    "schema": {
+                                        "properties": {
+                                            "access_token": {
+                                                "type": "string"
+                                            },
+                                            "expires_in": {
+                                                "type": "integer"
+                                            },
+                                            "refresh_token": {
+                                                "type": "string"
+                                            },
+                                            "token_type": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "runAfter": {
+                                    "Get_Athena_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ParseJson"
+                            }
+                        },
+                        "case": "ATHENA"
+                    },
+                    "AllScripts": {
+                        "actions": {
+                            "Authenticate_Credentials": {
+                                "inputs": {
+                                    "body": {
+                                        "Action": "GetUserAuthentication",
+                                        "AppUserID": "terry",
+                                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                                        "Data": "",
+                                        "Parameter1": "manning",
+                                        "Parameter2": "",
+                                        "Parameter3": "",
+                                        "Parameter4": "",
+                                        "Parameter5": "",
+                                        "Parameter6": "",
+                                        "Token": "@decodeBase64(body('Get_AllScripts_Access_Token')['$content'])"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "http://propmga-azure.unitysandbox.com/Unity/unityservice.svc/json/MagicJson"
+                                },
+                                "runAfter": {
+                                    "Get_AllScripts_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Cancel_Appointment_in_All_Scripts": {
+                                "inputs": {
+                                    "body": {
+                                        "Action": "SetAppointmentStatus",
+                                        "AppUserID": "terry",
+                                        "Appname": "PanoramicHealthInnovationsInc.PHITest.TestApp",
+                                        "Data": "",
+                                        "Parameter1": "@{body('Parse_JSON')?['AppointmentID']}",
+                                        "Parameter2": "@{body('Parse_JSON')?['CancellationReasonID']}",
+                                        "Parameter3": "",
+                                        "Parameter4": "",
+                                        "Parameter5": "",
+                                        "Parameter6": "",
+                                        "PatientID": "@{body('Parse_JSON')?['PatientID']}",
+                                        "Token": "@decodeBase64(body('Get_AllScripts_Access_Token')['$content'])"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "http://propmga-azure.unitysandbox.com/Unity/unityservice.svc/json/MagicJson"
+                                },
+                                "runAfter": {
+                                    "Authenticate_Credentials": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Get_AllScripts_Access_Token": {
+                                "inputs": {
+                                    "body": {
+                                        "Password": "P@n8r@M1cH6@Lta#nn5v@Tf!Ns2Ncp",
+                                        "Username": "Panor-6855-PHITest-test"
+                                    },
+                                    "headers": {
+                                        "Content-Type": "application/json"
+                                    },
+                                    "method": "POST",
+                                    "uri": "http://propmga-azure.unitysandbox.com/Unity/unityservice.svc/json/GetToken"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            }
+                        },
+                        "case": "ALLSCRIPTS"
+                    },
+                    "CERNER": {
+                        "actions": {
+                            "Cancel_Appointment_in_CERNER": {
+                                "inputs": {
+                                    "body": [
+                                        {
+                                            "op": "replace",
+                                            "path": "/status",
+                                            "value": "cancelled"
+                                        }
+                                    ],
+                                    "headers": {
+                                        "Accept": "application/fhir+json",
+                                        "Authorization": "@concat('Basic ', body('Get_Endpoint_Details')['header'][1])",
+                                        "Content-Type": "application/json-patch+json"
+                                    },
+                                    "method": "PATCH",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'Appointment/',body('Parse_JSON')?['AppointmentID'])"
+                                },
+                                "runAfter": {
+                                    "Get_CERNER_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "Get_CERNER_Access_Token": {
+                                "inputs": {
+                                    "body": "grant_type=client_credentials&scope=system%2FAppointment.write%20system%2FPatient.read%20system%2FObservation.read",
+                                    "headers": {
+                                        "Accept": "application/json",
+                                        "Authorization": "@concat('Basic ', body('Get_Endpoint_Details')['header'][1])",
+                                        "Content-Type": "application/x-www-form-urlencoded"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat('https://authorization.sandboxcerner.com/tenants/',body('Get_Endpoint_Details')['header'][0],'/protocols/oauth2/profiles/smart-v1/token')"
+                                },
+                                "runAfter": {},
+                                "type": "Http"
+                            },
+                            "Return_Cancel_Appointment_ErrorResponse": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"CERNER\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Cancel_Appointment_in_CERNER')['statusCode'],'\" },\"Body\":{ \"Error Description\" : \"',body('Cancel_Appointment_in_CERNER')['issue'][0]['details']['text'],'\"}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Cancel_Appointment_in_CERNER": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Return_Cancel_Appointment_Response": {
+                                "inputs": {
+                                    "body": "@body('Cancel_Appointment_in_CERNER')",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Cancel_Appointment_in_CERNER": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "CERNER"
+                    },
+                    "DrCHRONO": {
+                        "actions": {
+                            "Delete_Appointment_in_DrChrono": {
+                                "inputs": {
+                                    "headers": {
+                                        "Authorization": "Bearer @{body('LA.PHI.DRCHRONO.RefreshAccessToken')['AccessToken']}"
+                                    },
+                                    "method": "DELETE",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'appointments/',body('Parse_JSON')?['AppointmentID'])"
+                                },
+                                "runAfter": {
+                                    "LA.PHI.DRCHRONO.RefreshAccessToken": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "LA.PHI.DRCHRONO.RefreshAccessToken": {
+                                "inputs": {
+                                    "body": {
+                                        "RefreshToken": "@body('Get_Endpoint_Details')['header'][1]"
+                                    },
+                                    "host": {
+                                        "triggerName": "manual",
+                                        "workflow": {
+                                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.DRCHRONO.RefreshAccessToken"
+                                        }
+                                    }
+                                },
+                                "runAfter": {},
+                                "type": "Workflow"
+                            },
+                            "Send_DrChrono_Cancel_Appointment_ErrorResponse": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"DRCHRONO\", \"Status\" : \"Error\", \"StatusCode\" : \"',outputs('Delete_Appointment_in_DrChrono')['statusCode'],'\" },\"Body\":{ \"Description\" : \"Error\"}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Delete_Appointment_in_DrChrono": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Send_DrChrono_Cancel_Appointment_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"DRCHRONO\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Delete_Appointment_in_DrChrono')['statusCode'],'\" },\"Body\":{ \"Description\" : \"Appointment Deleted\"}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Delete_Appointment_in_DrChrono": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            }
+                        },
+                        "case": "DRCHRONO"
+                    },
+                    "EPIC": {
+                        "actions": {
+                            "Cancel_Appointment_in_EPIC": {
+                                "inputs": {
+                                    "body": {
+                                        "Comment": "This is a Dummy Request",
+                                        "Contact": {
+                                            "ID": "@{body('Parse_JSON')?['ContactID']}",
+                                            "Type": "@{body('Parse_JSON')?['ContactIDType']}"
+                                        },
+                                        "Patient": {
+                                            "ID": "@{body('Parse_JSON')?['PatientID']}",
+                                            "Type": "@{body('Parse_JSON')?['PatientIDType']}"
+                                        },
+                                        "Reason": "@{body('Parse_JSON')?['CancellationReason']}"
+                                    },
+                                    "headers": {
+                                        "Authorization": "Basic @{variables('AccessToken')}",
+                                        "Content-Type": "application/json",
+                                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
+                                    },
+                                    "method": "POST",
+                                    "uri": "@concat(body('Get_Endpoint_Details')['address'],'2014/PatientAccess/External/CancelAppointment/Scheduling/Cancel')"
+                                },
+                                "runAfter": {
+                                    "Set_Access_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Http"
+                            },
+                            "EPIC_Error_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Failure\", \"StatusCode\" : \"',outputs('Cancel_Appointment_in_EPIC')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Failed\", \"ReasonDescription\" :\"',body('Cancel_Appointment_in_EPIC')['ExceptionMessage'],'\"}}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Cancel_Appointment_in_EPIC": [
+                                        "Failed"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "EPIC_Success_Response": {
+                                "inputs": {
+                                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"',outputs('Cancel_Appointment_in_EPIC')['statusCode'],'\" },\"Body\":{ \"Status\" : \"Success\", \"ReasonDescription\" :',body('Cancel_Appointment_in_EPIC'),'}}'))",
+                                    "statusCode": 200
+                                },
+                                "kind": "Http",
+                                "runAfter": {
+                                    "Cancel_Appointment_in_EPIC": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Response"
+                            },
+                            "Set_Access_Token": {
+                                "inputs": {
+                                    "name": "AccessToken",
+                                    "value": "@base64(concat('emp$',substring(body('Get_Endpoint_Details')['header'][0],9),':',substring(body('Get_Endpoint_Details')['header'][1],9)))"
+                                },
+                                "runAfter": {},
+                                "type": "SetVariable"
+                            }
+                        },
+                        "case": "EPIC"
+                    }
+                },
+                "default": {
+                    "actions": {}
+                },
+                "expression": "@variables('Endpoint')",
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Switch"
+            },
+            "ValidateInput": {
+                "inputs": {
+                    "body": "@triggerBody()",
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/ValidateInput"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
             }
         },
         "contentVersion": "1.0.0.0",
@@ -78,7 +596,17 @@
         "triggers": {
             "manual": {
                 "inputs": {
-                    "schema": {}
+                    "schema": {
+                        "properties": {
+                            "EndpointIdentifier": {
+                                "type": "string"
+                            },
+                            "Identifier": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
                 },
                 "kind": "Http",
                 "type": "Request"
