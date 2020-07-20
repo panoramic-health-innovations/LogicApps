@@ -2,58 +2,112 @@
     "definition": {
         "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
         "actions": {
-            "Epic_Access_Token": {
-                "inputs": {
-                    "variables": [
+            "Check_Validity_Of_Input": {
+                "actions": {},
+                "else": {
+                    "actions": {
+                        "Return_Bad_Format_Response": {
+                            "inputs": {
+                                "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"',triggerBody()?['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}'))",
+                                "statusCode": 200
+                            },
+                            "kind": "Http",
+                            "runAfter": {},
+                            "type": "Response"
+                        },
+                        "Terminate": {
+                            "inputs": {
+                                "runError": {
+                                    "code": "400",
+                                    "message": "Failed"
+                                },
+                                "runStatus": "Failed"
+                            },
+                            "runAfter": {
+                                "Return_Bad_Format_Response": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate"
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
                         {
-                            "name": "EpicAccessToken",
-                            "type": "string",
-                            "value": "ZW1wJFBBTk9SQU1JQzp6RGlmNjI5emleN29YWnVEV2h1NQ=="
+                            "equals": [
+                                "@json(string(body('LA.PHI.General.CheckEndpointAvailability')))['Header']['Status']",
+                                "Success"
+                            ]
+                        },
+                        {
+                            "equals": [
+                                "@body('ValidateInput')",
+                                "Success"
+                            ]
                         }
                     ]
                 },
-                "runAfter": {},
-                "type": "InitializeVariable"
-            },
-            "Get_CarePlan_Details": {
-                "inputs": {
-                    "headers": {
-                        "Authorization": "Basic @{variables('EPICAccessToken')}",
-                        "Content-Type": "application/json",
-                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
-                    },
-                    "method": "GET",
-                    "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/DSTU2/CarePlan?patient=@{triggerBody()?['PatientID']}"
-                },
                 "runAfter": {
-                    "Epic_Access_Token": [
+                    "LA.PHI.General.CheckEndpointAvailability": [
                         "Succeeded"
                     ]
                 },
-                "type": "Http"
+                "type": "If"
             },
-            "Get_Device_Details": {
-                "inputs": {
-                    "headers": {
-                        "Authorization": "Basic @{variables('EPICAccessToken')}",
-                        "Content-Type": "application/json",
-                        "Epic-Client-ID": "672c5f7d-4098-46ff-a00f-57c02f330fe9"
-                    },
-                    "method": "GET",
-                    "uri": "https://apporchard.epic.com/interconnect-aocurprd-username/api/FHIR/DSTU2/Device?patient=@{triggerBody()?['PatientID']}"
-                },
+            "Compose_Fields": {
+                "inputs": "@replace(concat('{ \"',replace(replace(string(triggerBody()?['Identifier']),'=','\":\"'),'|','\",\"'),'\"}'),' ','')",
                 "runAfter": {
-                    "Get_CarePlan_Details": [
+                    "Check_Validity_Of_Input": [
                         "Succeeded"
                     ]
                 },
-                "type": "Http"
+                "type": "Compose"
+            },
+            "GetAccessToken": {
+                "inputs": {
+                    "body": {
+                        "audience": "https://azurehealthcareapis.com",
+                        "authority": "https://login.microsoftonline.com/894e47d6-5fd9-4351-b8a4-f3a178380c66",
+                        "clientId": "d65826a4-a0d5-44d3-8f88-1e6660715fe9",
+                        "clientSecret": "+^;>*+{;});Y:@}#;0/}D_//W$([*dkl?-#({;_^%"
+                    },
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/GetAccessToken"
+                    }
+                },
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Function"
+            },
+            "LA.PHI.General.CheckEndpointAvailability": {
+                "inputs": {
+                    "body": {
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.General.CheckEndpointAvailability"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "ValidateInput": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
             },
             "LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API": {
                 "inputs": {
                     "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
                     },
                     "host": {
                         "triggerName": "manual",
@@ -63,7 +117,7 @@
                     }
                 },
                 "runAfter": {
-                    "LA.PHI.PatientHealthRecords.GetConditionDetails.API": [
+                    "LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API": [
                         "Succeeded"
                     ]
                 },
@@ -72,8 +126,9 @@
             "LA.PHI.PatientHealthRecords.GetConditionDetails.API": {
                 "inputs": {
                     "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
                     },
                     "host": {
                         "triggerName": "manual",
@@ -83,7 +138,7 @@
                     }
                 },
                 "runAfter": {
-                    "LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API": [
+                    "LA.PHI.PatientHealthRecords.GetProcedureDetails.API": [
                         "Succeeded"
                     ]
                 },
@@ -92,8 +147,9 @@
             "LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API": {
                 "inputs": {
                     "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
                     },
                     "host": {
                         "triggerName": "manual",
@@ -112,13 +168,56 @@
             "LA.PHI.PatientHealthRecords.GetGoalDetails.API": {
                 "inputs": {
                     "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
                     },
                     "host": {
                         "triggerName": "manual",
                         "workflow": {
                             "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetGoalDetails.API"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "LA.PHI.PatientHealthRecords.GetMedicationStatement.API": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "LA.PHI.PatientHealthRecords.GetImmunizationDetails.API": {
+                "inputs": {
+                    "body": {
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetImmunizationDetails.API"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "LA.PHI.PatientHealthRecords.GetConditionDetails.API": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "LA.PHI.PatientHealthRecords.GetLabDetails.API": {
+                "inputs": {
+                    "body": {
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetLabDetails.API"
                         }
                     }
                 },
@@ -129,16 +228,17 @@
                 },
                 "type": "Workflow"
             },
-            "LA.PHI.PatientHealthRecords.GetImmunizationDetails.API": {
+            "LA.PHI.PatientHealthRecords.GetMedicationStatement.API": {
                 "inputs": {
                     "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
                     },
                     "host": {
                         "triggerName": "manual",
                         "workflow": {
-                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetImmunizationDetails.API"
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetMedicationStatement.API"
                         }
                     }
                 },
@@ -149,56 +249,59 @@
                 },
                 "type": "Workflow"
             },
-            "LA.PHI.PatientHealthRecords.GetLabDetails.API": {
-                "inputs": {
-                    "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
-                    },
-                    "host": {
-                        "triggerName": "manual",
-                        "workflow": {
-                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetLabDetails.API"
-                        }
-                    }
-                },
-                "runAfter": {
-                    "LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API": [
-                        "Succeeded"
-                    ]
-                },
-                "type": "Workflow"
-            },
-            "LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API": {
-                "inputs": {
-                    "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
-                    },
-                    "host": {
-                        "triggerName": "manual",
-                        "workflow": {
-                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API"
-                        }
-                    }
-                },
-                "runAfter": {
-                    "LA.PHI.PatientHealthRecords.GetProcedureDetails.API": [
-                        "Succeeded"
-                    ]
-                },
-                "type": "Workflow"
-            },
             "LA.PHI.PatientHealthRecords.GetProcedureDetails.API": {
                 "inputs": {
                     "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
                     },
                     "host": {
                         "triggerName": "manual",
                         "workflow": {
                             "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetProcedureDetails.API"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API": {
+                "inputs": {
+                    "body": {
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "GetAccessToken": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Workflow"
+            },
+            "LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API": {
+                "inputs": {
+                    "body": {
+                        "AzureFHIRID": "@body('Parse_JSON')?['AzurePatientFHIRID']",
+                        "EMRFHIRPatientID": "@body('Parse_JSON')?['PatientID']",
+                        "EndpointIdentifier": "@triggerBody()?['EndpointIdentifier']"
+                    },
+                    "host": {
+                        "triggerName": "manual",
+                        "workflow": {
+                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API"
                         }
                     }
                 },
@@ -209,58 +312,63 @@
                 },
                 "type": "Workflow"
             },
-            "LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API": {
+            "Parse_JSON": {
                 "inputs": {
-                    "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
-                    },
-                    "host": {
-                        "triggerName": "manual",
-                        "workflow": {
-                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API"
-                        }
+                    "content": "@outputs('Compose_Fields')",
+                    "schema": {
+                        "properties": {
+                            "AzurePatientFHIRID": {
+                                "type": "string"
+                            },
+                            "PatientID": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
                     }
                 },
                 "runAfter": {
-                    "LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API": [
+                    "Compose_Fields": [
                         "Succeeded"
                     ]
                 },
-                "type": "Workflow"
-            },
-            "LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API": {
-                "inputs": {
-                    "body": {
-                        "AzureFHIRID": "@triggerBody()?['AzurePatientFHIRID']",
-                        "EMRFHIRPatientID": "@triggerBody()?['PatientID']"
-                    },
-                    "host": {
-                        "triggerName": "manual",
-                        "workflow": {
-                            "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/LA.PNM.FHIR.RG/providers/Microsoft.Logic/workflows/LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API"
-                        }
-                    }
-                },
-                "runAfter": {
-                    "Get_Device_Details": [
-                        "Succeeded"
-                    ]
-                },
-                "type": "Workflow"
+                "type": "ParseJson"
             },
             "Response": {
                 "inputs": {
-                    "body": "@concat('{\"Header\":{ \"Endpoint\" : \"EPIC\", \"Status\" : \"Success\", \"StatusCode\" : \"200\" },\"Body\":{ ',body('LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetProcedureDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetMedicationRequestDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetLabDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetImmunizationDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetConditionDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetGoalDetails.API'),'}}')",
+                    "body": "@concat('{\"Header\":{ \"Endpoint\" : \"',triggerBody()?['EndpointIdentifier'],'\", \"Status\" : \"Success\", \"StatusCode\" : \"200\" },\"Body\":{ ',body('LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetProcedureDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetConditionDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetMedicationStatement.API'),',',body('LA.PHI.PatientHealthRecords.GetVitalSignsDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetLabDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetImmunizationDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetSmokingHistoryDetails.API'),',',body('LA.PHI.PatientHealthRecords.GetGoalDetails.API'),'}}')",
                     "statusCode": 200
                 },
                 "kind": "Http",
                 "runAfter": {
-                    "LA.PHI.PatientHealthRecords.GetAllergyIntoleranceDetails.API": [
+                    "LA.PHI.PatientHealthRecords.GetDiagnosticDetails.API": [
                         "Succeeded"
                     ]
                 },
                 "type": "Response"
+            },
+            "Return_Parsing_Error": {
+                "inputs": {
+                    "body": "@json(concat('{\"Header\":{ \"Endpoint\" : \"',triggerBody()?['EndpointIdentifier'],'\", \"Status\" : \"Error\", \"StatusCode\" : \"400\" },\"Body\":{ \"ErrorDescription\" : \"Bad Format\"}}'))",
+                    "statusCode": 200
+                },
+                "kind": "Http",
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Failed"
+                    ]
+                },
+                "type": "Response"
+            },
+            "ValidateInput": {
+                "inputs": {
+                    "body": "@triggerBody()",
+                    "function": {
+                        "id": "/subscriptions/69aa0a7e-9493-4851-a6e8-80cca46db8cc/resourceGroups/Azure-FHIR-RG/providers/Microsoft.Web/sites/PanoramicFunctionHelper/functions/ValidateInput"
+                    }
+                },
+                "runAfter": {},
+                "type": "Function"
             }
         },
         "contentVersion": "1.0.0.0",
@@ -271,10 +379,10 @@
                 "inputs": {
                     "schema": {
                         "properties": {
-                            "AzurePatientFHIRID": {
+                            "EndpointIdentifier": {
                                 "type": "string"
                             },
-                            "PatientID": {
+                            "Identifier": {
                                 "type": "string"
                             }
                         },
